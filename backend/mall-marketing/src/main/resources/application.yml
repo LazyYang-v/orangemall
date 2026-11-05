@@ -1,0 +1,54 @@
+server:
+  port: 9004
+
+spring:
+  application:
+    name: mall-marketing
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/mall_marketing?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
+    username: root
+    password: root
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      timeout: 2s
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 2000
+            read-timeout: 5000
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      id-type: input
+
+seata:
+  enabled: true
+  application-id: ${spring.application.name}
+  tx-service-group: mall_tx_group
+  service:
+    vgroup-mapping:
+      mall_tx_group: default
+    grouplist:
+      default: ${SEATA_ADDR:localhost:8091}
+  registry:
+    type: file
+  config:
+    type: file
+  data-source-proxy-mode: AT
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

@@ -1,0 +1,44 @@
+server:
+  port: 9006
+
+spring:
+  application:
+    name: mall-pay
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/mall_pay?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
+    username: root
+    password: root
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 2000
+            read-timeout: 5000
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    username: mall
+    password: mall
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: input
+
+mall:
+  pay:
+    # 沙箱验签密钥（真实环境：支付宝 RSA2 / 微信 V3 平台证书）
+    sandbox-key: ${PAY_SANDBOX_KEY:orange-mall-sandbox-key-2026}
+
+logging:
+  level:
+    root: info

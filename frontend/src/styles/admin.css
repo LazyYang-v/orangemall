@@ -1,0 +1,25 @@
+/* 运营后台通用样式（仅在 AdminLayout 下加载） */
+.adm-page { padding: 20px 24px 40px; }
+.adm-title { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.adm-title h2 { font-size: 20px; }
+.adm-title .sub { font-size: 12px; color: var(--c-text-3); }
+.adm-title .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.adm-card { background: #fff; border-radius: 10px; box-shadow: var(--shadow-sm); border: 1px solid #ececf0; padding: 16px 18px; }
+.adm-card + .adm-card { margin-top: 16px; }
+.adm-grid > .adm-card + .adm-card { margin-top: 0; }
+.adm-card > h3 { font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.adm-card > h3 .hint { font-size: 12px; font-weight: 400; color: var(--c-text-3); }
+.adm-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.adm-toolbar .input, .adm-toolbar select { width: auto; height: 32px; }
+.adm-toolbar select { padding: 0 8px; border: 1px solid var(--c-border-2); border-radius: 6px; background: #fff; }
+.adm-grid { display: grid; gap: 16px; }
+.kpi { display: flex; flex-direction: column; gap: 4px; }
+.kpi .k { font-size: 12px; color: var(--c-text-3); }
+.kpi .v { font-size: 26px; font-weight: 700; font-family: var(--font-num); color: var(--c-text); }
+.kpi .d { font-size: 12px; color: var(--c-text-3); }
+.op { color: var(--c-info); cursor: pointer; margin-right: 12px; font-size: 13px; background: none; border: none; padding: 0; }
+.op:hover { text-decoration: underline; }
+.op.danger { color: var(--c-red); }
+.op:disabled { color: var(--c-text-4); cursor: not-allowed; text-decoration: none; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }

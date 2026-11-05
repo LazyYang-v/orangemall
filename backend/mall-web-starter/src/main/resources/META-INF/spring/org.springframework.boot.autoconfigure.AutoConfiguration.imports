@@ -1,0 +1,2 @@
+com.orangemall.web.WebAutoConfiguration
+com.orangemall.web.MybatisPlusSupport

@@ -1,0 +1,84 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: mall-gateway
+  main:
+    web-application-type: reactive
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      timeout: 2s
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+    gateway:
+      httpclient:
+        connect-timeout: 2000
+        response-timeout: 30s
+        pool:
+          max-connections: 2000
+          acquire-timeout: 3000
+      routes:
+        - id: user
+          uri: lb://mall-user
+          predicates:
+            - Path=/api/auth/**,/api/users/**,/api/addresses/**,/api/points/**,/api/admin/risk/**,/api/admin/risk,/api/admin/logs/**,/api/admin/logs,/api/admin/mock/**
+          filters:
+            - StripPrefix=1
+        - id: product
+          uri: lb://mall-product
+          predicates:
+            - Path=/api/home/**,/api/home,/api/categories/**,/api/products/**,/api/products,/api/favorites/**,/api/favorites,/api/admin/products/**,/api/admin/products,/api/admin/skus/**,/api/admin/categories/**,/api/admin/categories
+          filters:
+            - StripPrefix=1
+        - id: cart
+          uri: lb://mall-cart
+          predicates:
+            - Path=/api/cart/**,/api/cart
+          filters:
+            - StripPrefix=1
+        - id: marketing
+          uri: lb://mall-marketing
+          predicates:
+            - Path=/api/coupons/**,/api/admin/coupons/**,/api/admin/coupons
+          filters:
+            - StripPrefix=1
+        - id: order
+          uri: lb://mall-order
+          predicates:
+            - Path=/api/orders/**,/api/orders,/api/admin/dashboard/**,/api/admin/dashboard,/api/admin/orders/**,/api/admin/orders
+          filters:
+            - StripPrefix=1
+        - id: pay
+          uri: lb://mall-pay
+          predicates:
+            - Path=/api/payments/**,/api/payments
+          filters:
+            - StripPrefix=1
+        - id: seckill
+          uri: lb://mall-seckill
+          predicates:
+            - Path=/api/seckill/**,/api/admin/seckill/**,/api/admin/seckill,/api/admin/cache/**
+          filters:
+            - StripPrefix=1
+        - id: ws
+          uri: lb:ws://mall-order
+          predicates:
+            - Path=/ws/**
+
+jwt:
+  secret: ${JWT_SECRET:orange-mall-jwt-secret-2026-change-me}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    root: info

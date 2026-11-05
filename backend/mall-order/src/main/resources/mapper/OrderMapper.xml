@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  分表 SQL：${s} / ${t} 只会是代码常量 0..3 / archive（见 Shard），不接收外部输入。
+  订单号低 2 位 = userId & 3，单用户查询只命中 t_order_{userId&3}（+ 归档表）；后台查询 UNION ALL 4 张分表 + 归档表。
+-->
+<mapper namespace="com.orangemall.order.mapper.OrderMapper">
+
+    <sql id="orderCols">id, user_id, status, source, goods_amount, freight, full_reduction, coupon_deduct, points_deduct,
+        seckill_deduct, pay_amount, coupon_id, points_used, remark, address_json, activity_id, pay_deadline, paid_at,
+        shipped_at, completed_at, closed_at, close_reason, pay_channel, payment_no, logistics_json, created_at, updated_at</sql>
+
+    <insert id="insertOrder">
+        INSERT INTO t_order_${s} (id, user_id, status, source, goods_amount, freight, full_reduction, coupon_deduct,
+            points_deduct, seckill_deduct, pay_amount, coupon_id, points_used, remark, address_json, activity_id,
+            pay_deadline, created_at, updated_at)
+        VALUES (#{o.id}, #{o.userId}, #{o.status}, #{o.source}, #{o.goodsAmount}, #{o.freight}, #{o.fullReduction},
+            #{o.couponDeduct}, #{o.pointsDeduct}, #{o.seckillDeduct}, #{o.payAmount}, #{o.couponId}, #{o.pointsUsed},
+            #{o.remark}, #{o.addressJson}, #{o.activityId}, #{o.payDeadline}, #{o.createdAt}, #{o.createdAt})
+    </insert>
+
+    <insert id="insertItem">
+        INSERT INTO t_order_item_${s} (order_id, user_id, sku_id, spu_id, name, spec_text, art, tint, price, count)
+        VALUES (#{i.orderId}, #{i.userId}, #{i.skuId}, #{i.spuId}, #{i.name}, #{i.specText}, #{i.art}, #{i.tint},
+            #{i.price}, #{i.count})
+    </insert>
+
+    <select id="findOrder" resultType="com.orangemall.order.domain.OrderRow">
+        SELECT <include refid="orderCols"/>, '${s}' AS src FROM t_order_${s} WHERE id = #{id}
+    </select>
+
+    <select id="findItems" resultType="com.orangemall.order.domain.OrderItemRow">
+        SELECT id, order_id, user_id, sku_id, spu_id, name, spec_text, art, tint, price, count
+        FROM t_order_item_${s} WHERE order_id IN
+        <foreach collection="ids" item="x" open="(" separator="," close=")">#{x}</foreach>
+        ORDER BY id
+    </select>
+
+    <!-- 关单 / 取消：只有仍为待支付才流转（并发 & 重复消费幂等） -->
+    <update id="closeIfPending">
+        UPDATE t_order_${s} SET status = #{status}, closed_at = #{now}, close_reason = #{reason}
+        WHERE id = #{id} AND status = 'PENDING_PAYMENT'
+    </update>
+
+    <update id="markPaid">
+        UPDATE t_order_${s} SET status = 'PAID', paid_at = #{paidAt}, pay_channel = #{channel}, payment_no = #{paymentNo}
+        WHERE id = #{id} AND status = 'PENDING_PAYMENT'
+    </update>
+
+    <update id="ship">
+        UPDATE t_order_${s} SET status = 'SHIPPED', shipped_at = #{now}, logistics_json = #{logistics}
+        WHERE id = #{id} AND status = 'PAID'
+    </update>
+
+    <!-- 物流轨迹 CAS：只有轨迹未被他人改过才写入，重复消息自然失效 -->
+    <update id="casLogistics">
+        UPDATE t_order_${s} SET logistics_json = #{logistics}
+        WHERE id = #{id} AND status = 'SHIPPED' AND logistics_json = #{expect}
+    </update>
+
+    <update id="complete">
+        UPDATE t_order_${s} SET status = 'COMPLETED', completed_at = #{now}, logistics_json = #{logistics}
+        WHERE id = #{id} AND status = 'SHIPPED'
+    </update>
+
+    <update id="expireNow">
+        UPDATE t_order_${s} SET pay_deadline = #{deadline} WHERE id = #{id} AND status = 'PENDING_PAYMENT'
+    </update>
+
+    <!-- ===================== 列表 / 统计 ===================== -->
+    <sql id="listFilter">
+        <if test="q.userId != null"> AND o.user_id = #{q.userId}</if>
+        <if test="q.statuses != null and q.statuses.size() > 0">
+            AND o.status IN <foreach collection="q.statuses" item="st" open="(" separator="," close=")">#{st}</foreach>
+        </if>
+        <if test="q.source != null"> AND o.source = #{q.source}</if>
+        <if test="q.keyword != null">
+            <choose>
+                <when test="q.adminKeyword">
+                    AND (CAST(o.id AS CHAR) LIKE #{q.keyword}
+                      OR JSON_UNQUOTE(JSON_EXTRACT(o.address_json, '$.receiver')) LIKE #{q.keyword}
+                      OR JSON_UNQUOTE(JSON_EXTRACT(o.address_json, '$.phone')) LIKE #{q.keyword})
+                </when>
+                <otherwise>
+                    AND (CAST(o.id AS CHAR) LIKE #{q.keyword}
+                      OR EXISTS (SELECT 1 FROM t_order_item_${t} i WHERE i.order_id = o.id AND i.name LIKE #{q.keyword}))
+                </otherwise>
+            </choose>
+        </if>
+    </sql>
+
+    <select id="list" resultType="com.orangemall.order.domain.OrderRow">
+        SELECT * FROM (
+        <foreach collection="q.tables" item="t" separator=" UNION ALL ">
+            SELECT o.*, '${t}' AS src FROM t_order_${t} o WHERE 1 = 1 <include refid="listFilter"/>
+        </foreach>
+        ) x ORDER BY created_at DESC, id DESC LIMIT #{q.offset}, #{q.size}
+    </select>
+
+    <select id="count" resultType="int">
+        SELECT COALESCE(SUM(c), 0) FROM (
+        <foreach collection="q.tables" item="t" separator=" UNION ALL ">
+            SELECT COUNT(*) c FROM t_order_${t} o WHERE 1 = 1 <include refid="listFilter"/>
+        </foreach>
+        ) x
+    </select>
+
+    <select id="statusCounts" resultType="com.orangemall.order.mapper.OrderMapper$StatusCount">
+        SELECT status, SUM(c) AS cnt FROM (
+        <foreach collection="tables" item="t" separator=" UNION ALL ">
+            SELECT status, COUNT(*) c FROM t_order_${t} WHERE 1 = 1
+            <if test="userId != null"> AND user_id = #{userId}</if>
+            GROUP BY status
+        </foreach>
+        ) x GROUP BY status
+    </select>
+
+    <!-- 近 N 日按「上海日期 + 状态」聚合（DATETIME 以 Asia/Shanghai 本地时间存储） -->
+    <select id="dailyStats" resultType="com.orangemall.order.mapper.OrderMapper$DailyStat">
+        SELECT d AS day, status, SUM(c) AS cnt, SUM(amt) AS amount FROM (
+        <foreach collection="tables" item="t" separator=" UNION ALL ">
+            SELECT DATE_FORMAT(created_at, '%Y-%m-%d') d, status, COUNT(*) c, SUM(pay_amount) amt
+            FROM t_order_${t} WHERE created_at &gt;= #{from}
+            GROUP BY d, status
+        </foreach>
+        ) x GROUP BY d, status
+    </select>
+
+    <!-- ===================== 定时任务 ===================== -->
+    <select id="overduePending" resultType="com.orangemall.order.domain.OrderRow">
+        SELECT <include refid="orderCols"/>, '${s}' AS src FROM t_order_${s}
+        WHERE status = 'PENDING_PAYMENT' AND pay_deadline &lt; #{before} ORDER BY pay_deadline LIMIT #{limit}
+    </select>
+
+    <select id="shippedInTransit" resultType="com.orangemall.order.domain.OrderRow">
+        SELECT <include refid="orderCols"/>, '${s}' AS src FROM t_order_${s}
+        WHERE status = 'SHIPPED' AND logistics_json IS NOT NULL ORDER BY shipped_at LIMIT #{limit}
+    </select>
+
+    <select id="archivableIds" resultType="long">
+        SELECT id FROM t_order_${s}
+        WHERE status IN ('COMPLETED', 'CLOSED', 'CANCELLED') AND created_at &lt; #{before} ORDER BY id LIMIT #{limit}
+    </select>
+
+    <insert id="copyToArchive">
+        INSERT IGNORE INTO t_order_archive (<include refid="orderCols"/>)
+        SELECT <include refid="orderCols"/> FROM t_order_${s} WHERE id IN
+        <foreach collection="ids" item="x" open="(" separator="," close=")">#{x}</foreach>
+    </insert>
+
+    <!-- 明细表各分表自增 ID 会冲突，归档表重新生成 ID -->
+    <insert id="copyItemsToArchive">
+        INSERT INTO t_order_item_archive (order_id, user_id, sku_id, spu_id, name, spec_text, art, tint, price, count, created_at, updated_at)
+        SELECT order_id, user_id, sku_id, spu_id, name, spec_text, art, tint, price, count, created_at, updated_at
+        FROM t_order_item_${s} WHERE order_id IN
+        <foreach collection="ids" item="x" open="(" separator="," close=")">#{x}</foreach>
+        AND order_id NOT IN (SELECT order_id FROM (SELECT DISTINCT order_id FROM t_order_item_archive WHERE order_id IN
+        <foreach collection="ids" item="x" open="(" separator="," close=")">#{x}</foreach>) a)
+    </insert>
+
+    <delete id="deleteOrders">
+        DELETE FROM t_order_${s} WHERE id IN
+        <foreach collection="ids" item="x" open="(" separator="," close=")">#{x}</foreach>
+    </delete>
+
+    <delete id="deleteItems">
+        DELETE FROM t_order_item_${s} WHERE order_id IN
+        <foreach collection="ids" item="x" open="(" separator="," close=")">#{x}</foreach>
+    </delete>
+</mapper>
