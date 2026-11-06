@@ -39,6 +39,7 @@ const routes: RouteRecordRaw[] = [
         children: [
           { path: '', name: 'user', component: () => import('@/views/user/UserOverview.vue') },
           { path: 'coupons', name: 'user-coupons', component: () => import('@/views/user/MyCouponsView.vue'), meta: { title: '我的优惠券' } },
+          { path: 'refunds', name: 'user-refunds', component: () => import('@/views/user/RefundsView.vue'), meta: { title: '我的售后' } },
           { path: 'favorites', name: 'user-favorites', component: () => import('@/views/user/FavoritesView.vue'), meta: { title: '我的收藏' } },
           { path: 'addresses', name: 'user-addresses', component: () => import('@/views/user/AddressView.vue'), meta: { title: '收货地址' } },
         ],
@@ -61,6 +62,8 @@ const routes: RouteRecordRaw[] = [
     children: [
       { path: '', name: 'admin', component: () => import('@/views/admin/DashboardView.vue'), meta: { title: '数据看板' } },
       { path: 'orders', name: 'admin-orders', component: () => import('@/views/admin/OrdersView.vue'), meta: { title: '订单管理' } },
+      { path: 'refunds', name: 'admin-refunds', component: () => import('@/views/admin/RefundsView.vue'), meta: { title: '售后管理' } },
+      { path: 'users', name: 'admin-users', component: () => import('@/views/admin/UsersView.vue'), meta: { title: '用户管理' } },
       { path: 'products', name: 'admin-products', component: () => import('@/views/admin/ProductsView.vue'), meta: { title: '商品 / SKU' } },
       { path: 'categories', name: 'admin-categories', component: () => import('@/views/admin/CategoriesView.vue'), meta: { title: '类目树' } },
       { path: 'coupons', name: 'admin-coupons', component: () => import('@/views/admin/CouponsView.vue'), meta: { title: '优惠券模板' } },

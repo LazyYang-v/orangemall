@@ -122,4 +122,41 @@ nav {
   padding: 1px 6px;
   border-radius: 8px 8px 8px 0;
 }
+@media (max-width: 900px) {
+  .inner {
+    height: auto;
+  }
+  .all {
+    width: auto;
+    flex: none;
+  }
+  .all-btn {
+    height: 40px;
+    padding: 0 14px;
+    font-size: 14px;
+    gap: 6px;
+  }
+  .all-btn span {
+    display: none;
+  }
+  nav {
+    margin-left: 12px;
+    gap: 18px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  nav::-webkit-scrollbar {
+    display: none;
+  }
+  .item {
+    font-size: 14px;
+    gap: 4px;
+  }
+  .item span {
+    white-space: nowrap;
+  }
+  .item em.badge {
+    display: none;
+  }
+}
 </style>

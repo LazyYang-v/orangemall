@@ -238,6 +238,9 @@ INSERT INTO t_order_1 (id, user_id, status, source, goods_amount, freight, full_
   (2120394857100003841, 1880000000000000001, 'PAID', 'NORMAL', 7900, 0, 0, 0, 0, 0, 7900, 0, '{"id":"1880000000000100001","receiver":"张三","phone":"13800000000","province":"陕西省","city":"汉中市","district":"汉台区","detail":"天汉大道 88 号 橙选小区 3 栋 1201","isDefault":true}', NOW(3) - INTERVAL 84600 SECOND, NOW(3) - INTERVAL 86340 SECOND, NULL, NULL, NULL, NULL, 'ALIPAY', 'P2120394857100003841', NULL, NOW(3) - INTERVAL 86400 SECOND),
   (2120394857100005121, 1880000000000000001, 'CLOSED', 'NORMAL', 32900, 0, 0, 0, 0, 0, 32900, 0, '{"id":"1880000000000100001","receiver":"张三","phone":"13800000000","province":"陕西省","city":"汉中市","district":"汉台区","detail":"天汉大道 88 号 橙选小区 3 栋 1201","isDefault":true}', NOW(3) - INTERVAL 257400 SECOND, NULL, NULL, NULL, NOW(3) - INTERVAL 257400 SECOND, '超时未支付，系统自动关闭（延迟队列）', NULL, NULL, NULL, NOW(3) - INTERVAL 259200 SECOND);
 
+-- OM-015：收货人/手机号冗余列（管理端检索走索引，不再 JSON_EXTRACT 全表扫）
+UPDATE t_order_1 SET receiver = JSON_UNQUOTE(JSON_EXTRACT(address_json, '$.receiver')), phone = JSON_UNQUOTE(JSON_EXTRACT(address_json, '$.phone')) WHERE receiver IS NULL;
+
 INSERT INTO t_order_item_1 (order_id, user_id, sku_id, spu_id, name, spec_text, art, tint, price, count, created_at) VALUES
   (2120394857100001281, 1880000000000000001, 101501, 1015, '小橙优选 每日坚果 30 袋装', '30 袋', 'snack', '#d99a4a', 6900, 1, NOW(3) - INTERVAL 518400 SECOND),
   (2120394857100001281, 1880000000000000001, 102401, 1024, '慢咖 挂耳咖啡 精品阿拉比卡 50 包', '中深烘', 'coffee', '#8b5a3c', 8900, 1, NOW(3) - INTERVAL 518400 SECOND),

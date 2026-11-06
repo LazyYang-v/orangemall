@@ -115,4 +115,13 @@ dd:hover {
   padding: 16px 0 24px;
   border-top: 1px solid var(--c-border);
 }
+@media (max-width: 900px) {
+  .footer { margin-top: 24px; }
+  .svc-inner { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 18px 0; }
+  .svc-item { gap: 8px; }
+  .svc-item b { font-size: 14px; }
+  .links { flex-wrap: wrap; gap: 18px 28px; padding: 20px 0; }
+  .hotline { padding-left: 0; border-left: none; width: 100%; align-items: flex-start; }
+  .copy { padding-inline: 16px; }
+}
 </style>

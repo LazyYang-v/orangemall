@@ -7,16 +7,16 @@
 <mapper namespace="com.orangemall.order.mapper.OrderMapper">
 
     <sql id="orderCols">id, user_id, status, source, goods_amount, freight, full_reduction, coupon_deduct, points_deduct,
-        seckill_deduct, pay_amount, coupon_id, points_used, remark, address_json, activity_id, pay_deadline, paid_at,
+        seckill_deduct, pay_amount, coupon_id, points_used, remark, address_json, receiver, phone, activity_id, pay_deadline, paid_at,
         shipped_at, completed_at, closed_at, close_reason, pay_channel, payment_no, logistics_json, created_at, updated_at</sql>
 
     <insert id="insertOrder">
         INSERT INTO t_order_${s} (id, user_id, status, source, goods_amount, freight, full_reduction, coupon_deduct,
-            points_deduct, seckill_deduct, pay_amount, coupon_id, points_used, remark, address_json, activity_id,
+            points_deduct, seckill_deduct, pay_amount, coupon_id, points_used, remark, address_json, receiver, phone, activity_id,
             pay_deadline, created_at, updated_at)
         VALUES (#{o.id}, #{o.userId}, #{o.status}, #{o.source}, #{o.goodsAmount}, #{o.freight}, #{o.fullReduction},
             #{o.couponDeduct}, #{o.pointsDeduct}, #{o.seckillDeduct}, #{o.payAmount}, #{o.couponId}, #{o.pointsUsed},
-            #{o.remark}, #{o.addressJson}, #{o.activityId}, #{o.payDeadline}, #{o.createdAt}, #{o.createdAt})
+            #{o.remark}, #{o.addressJson}, #{o.receiver}, #{o.phone}, #{o.activityId}, #{o.payDeadline}, #{o.createdAt}, #{o.createdAt})
     </insert>
 
     <insert id="insertItem">
@@ -67,6 +67,13 @@
         UPDATE t_order_${s} SET pay_deadline = #{deadline} WHERE id = #{id} AND status = 'PENDING_PAYMENT'
     </update>
 
+    <!-- 售后状态流转（from 为空 = 无条件置为 to，由调用方校验合法性） -->
+    <update id="refundState">
+        UPDATE t_order_${s} SET status = #{to}, updated_at = #{now}
+        WHERE id = #{id}
+        <if test="from != null"> AND status = #{from}</if>
+    </update>
+
     <!-- ===================== 列表 / 统计 ===================== -->
     <sql id="listFilter">
         <if test="q.userId != null"> AND o.user_id = #{q.userId}</if>
@@ -76,11 +83,9 @@
         <if test="q.source != null"> AND o.source = #{q.source}</if>
         <if test="q.keyword != null">
             <choose>
-                <when test="q.adminKeyword">
-                    AND (CAST(o.id AS CHAR) LIKE #{q.keyword}
-                      OR JSON_UNQUOTE(JSON_EXTRACT(o.address_json, '$.receiver')) LIKE #{q.keyword}
-                      OR JSON_UNQUOTE(JSON_EXTRACT(o.address_json, '$.phone')) LIKE #{q.keyword})
-                </when>
+                <when test="q.adminKeyword and q.keywordMode == 'ID'"> AND o.id = #{q.keywordId}</when>
+                <when test="q.adminKeyword and q.keywordMode == 'PHONE'"> AND o.phone LIKE #{q.keyword} ESCAPE '!'</when>
+                <when test="q.adminKeyword"> AND o.receiver LIKE #{q.keyword} ESCAPE '!'</when>
                 <otherwise>
                     AND (CAST(o.id AS CHAR) LIKE #{q.keyword}
                       OR EXISTS (SELECT 1 FROM t_order_item_${t} i WHERE i.order_id = o.id AND i.name LIKE #{q.keyword}))

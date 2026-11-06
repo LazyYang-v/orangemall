@@ -1,0 +1,27 @@
+
+     ✓ has orderId
+
+     checks.........................: 100.00% 1000 out of 1000
+     data_received..................: 23 MB   383 kB/s
+     data_sent......................: 34 MB   569 kB/s
+     http_req_blocked...............: avg=613.3µs  med=3.66µs  p(90)=7.83µs   p(95)=10.87µs  p(99)=36.81ms  max=93.95ms 
+     http_req_connecting............: avg=296.86µs med=0s      p(90)=0s       p(95)=0s       p(99)=13.57ms  max=61.54ms 
+     http_req_duration..............: avg=29.61ms  med=10.48ms p(90)=65.05ms  p(95)=113.16ms p(99)=276.39ms max=1.25s   
+       { expected_response:true }...: avg=29.61ms  med=10.48ms p(90)=65.05ms  p(95)=113.16ms p(99)=276.39ms max=1.25s   
+     ✓ { name:submit }..............: avg=74.14ms  med=30.74ms p(90)=205.88ms p(95)=316.73ms p(99)=502.89ms max=628.74ms
+     http_req_failed................: 0.00%   0 out of 88105
+     http_req_receiving.............: avg=874.09µs med=85.04µs p(90)=1.77ms   p(95)=3.72ms   p(99)=15.31ms  max=125.98ms
+     http_req_sending...............: avg=150.94µs med=9.79µs  p(90)=33.62µs  p(95)=99.9µs   p(99)=1.35ms   max=41.42ms 
+     http_req_tls_handshaking.......: avg=0s       med=0s      p(90)=0s       p(95)=0s       p(99)=0s       max=0s      
+     http_req_waiting...............: avg=28.58ms  med=9.99ms  p(90)=62.98ms  p(95)=108.78ms p(99)=263.97ms max=1.22s   
+     http_reqs......................: 88105   1471.591868/s
+     iteration_duration.............: avg=7.86s    med=84.31ms p(90)=41.61s   p(95)=51.24s   p(99)=57.66s   max=59.82s  
+     iterations.....................: 5000    83.513528/s
+     orders_success.................: 1000    16.702706/s
+     outcome........................: 5000    83.513528/s
+     sold_out.......................: 4000    66.810822/s
+     submit_to_success_ms...........: avg=38.37s   med=41.09s  p(90)=54.59s   p(95)=56.33s   p(99)=57.56s   max=58.35s  
+   ✓ unexpected.....................: 0       0/s
+     vus............................: 11      min=11           max=1000
+     vus_max........................: 1000    min=1000         max=1000
+

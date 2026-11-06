@@ -161,6 +161,8 @@ async function rebuy(o: Order) {
   background: #fff;
   border-radius: var(--radius-lg);
   padding: 0 20px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .tabs {
   display: flex;

@@ -345,4 +345,24 @@ const issueItem = (skuId: string) => cart.items.find((i) => i.skuId === skuId)
   font-size: 13px;
   flex: none;
 }
+@media (max-width: 900px) {
+  .thead { display: none; }
+  .row { flex-wrap: wrap; row-gap: 8px; padding: 12px; }
+  .c-check { width: 32px; }
+  .c-info { flex: 1 1 calc(100% - 32px); }
+  .c-price { display: none; }
+  .c-qty, .c-sum, .c-op { width: auto; }
+  .c-qty { margin-left: 32px; }
+  .c-sum { margin-left: auto; }
+  .bar { padding-left: 12px; gap: 10px; height: auto; min-height: 56px; }
+  .bar .op, .bar .clear { display: none; }
+  .total { column-gap: 8px; }
+  .big { font-size: 18px; }
+  .go { width: 96px; height: 56px; font-size: 16px; padding: 0; }
+}
+@media (max-width: 900px) {
+  .bar .c-check { width: auto; white-space: nowrap; }
+  .bar .tip { display: none; }
+  .saved { display: none; }
+}
 </style>

@@ -12,6 +12,11 @@
     <description>订单服务：试算/下单（Seata TM）、分表、延迟关单、支付结果消费、发货与物流推送、WebSocket、归档</description>
 
     <dependencies>
+        <!-- OM-025：Feign 走 OkHttp 连接池（JDK HttpURLConnection 每主机仅保活 5 条空闲连接，12 线程落单时反复建连） -->
+        <dependency>
+            <groupId>io.github.openfeign</groupId>
+            <artifactId>feign-okhttp</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.orangemall</groupId>
             <artifactId>mall-web-starter</artifactId>

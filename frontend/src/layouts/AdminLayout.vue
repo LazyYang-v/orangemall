@@ -13,7 +13,14 @@ const router = useRouter()
 const user = useUserStore()
 const MENU: Array<{ group: string; items: Array<{ to: string; icon: string; text: string; exact?: boolean }> }> = [
   { group: '概览', items: [{ to: '/admin', icon: 'chart', text: '数据看板', exact: true }] },
-  { group: '交易', items: [{ to: '/admin/orders', icon: 'order', text: '订单管理' }] },
+  { group: '交易', items: [{ to: '/admin/orders', icon: 'order', text: '订单管理' }, { to: '/admin/refunds', icon: 'refund', text: '售后管理' }] },
+  {
+    group: '用户',
+    items: [
+      { to: '/admin/users', icon: 'user', text: '用户管理' },
+      { to: '/admin/risk', icon: 'shield', text: '风控黑名单' },
+    ],
+  },
   {
     group: '商品',
     items: [
@@ -32,7 +39,6 @@ const MENU: Array<{ group: string; items: Array<{ to: string; icon: string; text
     group: '稳定性',
     items: [
       { to: '/admin/cache', icon: 'database', text: '缓存一致性' },
-      { to: '/admin/risk', icon: 'shield', text: '风控黑名单' },
       { to: '/admin/logs', icon: 'activity', text: '链路日志' },
     ],
   },

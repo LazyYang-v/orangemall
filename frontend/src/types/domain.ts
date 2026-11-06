@@ -188,7 +188,7 @@ export interface FullReductionRule {
  *        ├──用户取消──▶ CANCELLED
  *        └──30min 未支付（RabbitMQ TTL+DLX）──▶ CLOSED
  */
-export type OrderStatus = 'PENDING_PAYMENT' | 'PAID' | 'SHIPPED' | 'COMPLETED' | 'CANCELLED' | 'CLOSED'
+export type OrderStatus = 'PENDING_PAYMENT' | 'PAID' | 'SHIPPED' | 'COMPLETED' | 'CANCELLED' | 'CLOSED' | 'REFUND_APPLYING' | 'REFUNDED'
 
 export interface OrderItem {
   skuId: string
@@ -388,4 +388,39 @@ export interface RiskUser {
   hits: number
   lastAction: string
   blocked: boolean
+}
+
+/** 售后单（契约增量，Phase 2） */
+export type RefundStatus = 'WAIT_APPROVAL' | 'APPROVED' | 'REFUNDING' | 'DONE' | 'REJECTED' | 'CANCELLED'
+export type RefundType = 'REFUND' | 'RETURN' | 'EXCHANGE'
+
+export interface RefundOrder {
+  refundId: string
+  orderId: string
+  userId?: string
+  paymentNo?: string | null
+  type: RefundType
+  reason: string
+  amount: number
+  status: RefundStatus
+  prevStatus?: OrderStatus
+  auditRemark?: string | null
+  refundTradeNo?: string | null
+  doneAt?: string | null
+  createdAt: string
+}
+
+/** admin 用户管理（Phase 2） */
+export interface AdminUser {
+  id: string
+  phone: string
+  nickname: string
+  points: number
+  creditScore: number
+  riskHits?: number
+  level?: number
+  role?: string
+  blocked: boolean
+  createdAt: string
+  lastAction?: string
 }

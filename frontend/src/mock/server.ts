@@ -1026,6 +1026,27 @@ route('POST', '/admin/seckill/:activityId/simulate', 'admin', ({ params, body })
   return { requests: n, success, soldOut, limited, redisLeft: d.seckillStock[item.activityId], dbLeft: d.seckillDbStock[item.activityId] }
 })
 
+/* OM-013 / OM-019：mock 模式下可靠性视图恒为健康、无死信（演练需真实后端） */
+let mockConsumerPaused = false
+route('GET', '/admin/seckill/health', 'admin', () => ({
+  consumer: { running: true, paused: mockConsumerPaused },
+  lag: 0,
+  stuckSeconds: 180,
+  autoReset: true,
+  inflight: [],
+  deadLetters: { new: 0, total: 0 },
+}))
+route('GET', '/admin/seckill/dead-letters', 'admin', () => [])
+route('POST', '/admin/seckill/dead-letters/:id/resolve', 'admin', () => {
+  throw new MockError(7011, '死信不存在或已处理')
+})
+route('POST', '/admin/seckill/:activityId/inflight/reset', 'admin', () => ({ reset: false, inflight: 0 }))
+route('POST', '/admin/seckill/consumer/:action', 'admin', ({ params }) => {
+  mockConsumerPaused = params.action === 'pause'
+  opsLog('ALERT', `[演练] ${mockConsumerPaused ? '暂停' : '恢复'}秒杀主消费者（mock）`)
+  return { paused: mockConsumerPaused }
+})
+
 route('GET', '/admin/cache/check', 'admin', () => {
   const rows: CacheCheckRow[] = Object.keys(db().seckillStock).slice(-12).map((k) => ({
     key: `seckill:stock:${k}`,

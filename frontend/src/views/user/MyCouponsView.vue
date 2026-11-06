@@ -60,4 +60,7 @@ const TABS: Array<[UserCouponStatus, string]> = [['UNUSED', '未使用'], ['USED
   grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
+@media (max-width: 900px) {
+  .list, .grid { grid-template-columns: minmax(0, 1fr); }
+}
 </style>

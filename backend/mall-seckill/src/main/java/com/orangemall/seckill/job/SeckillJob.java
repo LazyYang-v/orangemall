@@ -1,6 +1,9 @@
 package com.orangemall.seckill.job;
 
+import com.orangemall.common.Const;
 import com.orangemall.seckill.entity.SeckillActivity;
+import com.orangemall.seckill.service.SeckillReliabilityService;
+import com.orangemall.seckill.support.KafkaLagProbe;
 import com.orangemall.seckill.mapper.SeckillActivityMapper;
 import com.orangemall.seckill.support.Keys;
 import com.orangemall.seckill.support.SeckillCalendar;
@@ -12,6 +15,8 @@ import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+
+import java.util.function.LongSupplier;
 
 /**
  * 滚动建场与一致性校验：
@@ -27,6 +32,8 @@ public class SeckillJob {
     private final StringRedisTemplate redis;
     private final RedissonClient redisson;
     private final OpsLogger ops;
+    private final SeckillReliabilityService reliability;
+    private final KafkaLagProbe lagProbe;
 
     @Scheduled(fixedDelay = 30_000, initialDelay = 5_000)
     public void rollSessions() {
@@ -82,20 +89,30 @@ public class SeckillJob {
         if (!lock.tryLock()) return;
         try {
             long now = System.currentTimeMillis();
+            // 一轮最多探测一次 Kafka 积压，且只在确有滞留候选时才探测
+            long[] lagCache = {Long.MIN_VALUE};
+            LongSupplier lag = () -> lagCache[0] != Long.MIN_VALUE ? lagCache[0]
+                    : (lagCache[0] = lagProbe.lag(Const.KAFKA_SECKILL_TOPIC));
             for (SeckillCalendar.Session s : SeckillCalendar.window(now)) {
                 for (SeckillCalendar.Tpl tpl : SeckillCalendar.rotated(s.start())) {
                     String aid = SeckillCalendar.activityId(s.id(), tpl.skuId());
+                    // OM-013：在途滞留巡检（可能触发自动重置，故之后重新读取在途/库存）
+                    try {
+                        reliability.watchInflight(aid, readInt(Keys.inflight(aid)), now, lag);
+                    } catch (Exception e) {
+                        log.warn("inflight watch {} failed: {}", aid, e.toString());
+                    }
                     String raw = redis.opsForValue().get(Keys.stock(aid));
                     if (raw == null) continue;
                     Integer dbStock = activityMapper.stockOf(aid);
                     if (dbStock == null) continue;
-                    String infRaw = redis.opsForValue().get(Keys.inflight(aid));
-                    int inflight = infRaw == null ? 0 : Integer.parseInt(infRaw);
+                    int inflight = readInt(Keys.inflight(aid));
                     int expect = dbStock - inflight;
                     if (Integer.parseInt(raw) != expect) {
                         ops.log("CACHE", "[一致性校验] " + Keys.stock(aid) + " Redis=" + raw
                                 + " DB=" + dbStock + " 在途=" + inflight + (inflight == 0 ? " → 自动修复" : " → 等待在途归零"));
-                        if (inflight == 0 && "ONGOING".equals(s.status(now))) {
+                        // 已结束场次同样以 DB 为准修复（不再售卖，修复无副作用），避免不一致每分钟刷屏
+                        if (inflight == 0 && !"UPCOMING".equals(s.status(now))) {
                             redis.opsForValue().set(Keys.stock(aid), String.valueOf(expect));
                         }
                     }
@@ -106,5 +123,10 @@ public class SeckillJob {
         } finally {
             lock.unlock();
         }
+    }
+
+    private int readInt(String key) {
+        String v = redis.opsForValue().get(key);
+        return v == null ? 0 : Integer.parseInt(v);
     }
 }

@@ -17,6 +17,8 @@ spring:
       discovery:
         server-addr: ${NACOS_ADDR:localhost:8848}
     openfeign:
+      okhttp:
+        enabled: true
       client:
         config:
           default:

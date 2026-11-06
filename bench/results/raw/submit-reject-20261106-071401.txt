@@ -1,0 +1,26 @@
+
+     ✓ rejected (7003/4290)
+
+     biz_code.......................: 75223   2503.019523/s
+     checks.........................: 100.00% 75223 out of 75223
+     data_received..................: 19 MB   642 kB/s
+     data_sent......................: 33 MB   1.1 MB/s
+     dropped_iterations.............: 14781   491.832705/s
+     http_req_blocked...............: avg=105.76µs med=3.7µs   p(90)=7.91µs   p(95)=12.3µs   p(99)=1.17ms   max=386.92ms
+     http_req_connecting............: avg=65.77µs  med=0s      p(90)=0s       p(95)=0s       p(99)=581.62µs max=178.72ms
+     http_req_duration..............: avg=230.69ms med=40.53ms p(90)=705.81ms p(95)=841.22ms p(99)=1.38s    max=2.69s   
+       { expected_response:true }...: avg=230.69ms med=40.53ms p(90)=705.81ms p(95)=841.22ms p(99)=1.38s    max=2.69s   
+     ✗ { name:submit }..............: avg=229.85ms med=36.54ms p(90)=707.97ms p(95)=842.35ms p(99)=1.39s    max=2.69s   
+   ✓ http_req_failed................: 0.00%   0 out of 77057
+     http_req_receiving.............: avg=6.67ms   med=117.2µs p(90)=15.75ms  p(95)=36.14ms  p(99)=126.37ms max=572.57ms
+     http_req_sending...............: avg=1.15ms   med=12.54µs p(90)=198.97µs p(95)=1.06ms   p(99)=44.13ms  max=378.78ms
+     http_req_tls_handshaking.......: avg=0s       med=0s      p(90)=0s       p(95)=0s       p(99)=0s       max=0s      
+     http_req_waiting...............: avg=222.85ms med=38.85ms p(90)=682.49ms p(95)=818.76ms p(99)=1.36s    max=2.52s   
+     http_reqs......................: 77057   2564.045244/s
+     iteration_duration.............: avg=238.69ms med=36.91ms p(90)=730.38ms p(95)=873.89ms p(99)=1.46s    max=2.69s   
+     iterations.....................: 75223   2503.019523/s
+   ✓ rejected_ok....................: 100.00% 75223 out of 75223
+     vus............................: 88      min=8              max=1784
+     vus_max........................: 1833    min=779            max=1833
+
+time="2026-11-05T23:14:32Z" level=error msg="thresholds on metrics 'http_req_duration{name:submit}' have been crossed"

@@ -7,6 +7,23 @@ export const ORDER_STATUS: Record<OrderStatus, { text: string; color: string }> 
   COMPLETED: { text: '已完成', color: '#1aa35b' },
   CANCELLED: { text: '已取消', color: '#999' },
   CLOSED: { text: '已关闭', color: '#999' },
+  REFUND_APPLYING: { text: '售后处理中', color: '#e6a23c' },
+  REFUNDED: { text: '已退款', color: '#ff3a3a' },
+}
+
+export const REFUND_STATUS: Record<string, { text: string; color: string }> = {
+  WAIT_APPROVAL: { text: '待审批', color: '#e6a23c' },
+  APPROVED: { text: '审批通过', color: '#2f7cf6' },
+  REFUNDING: { text: '退款中', color: '#2f7cf6' },
+  DONE: { text: '已退款', color: '#1aa35b' },
+  REJECTED: { text: '已拒绝', color: '#999' },
+  CANCELLED: { text: '用户已取消', color: '#999' },
+}
+
+export const REFUND_TYPE: Record<string, string> = {
+  REFUND: '仅退款',
+  RETURN: '退货退款',
+  EXCHANGE: '换货',
 }
 
 export const PAY_CHANNEL: Record<PayChannel, string> = {

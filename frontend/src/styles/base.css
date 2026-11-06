@@ -49,7 +49,7 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  min-width: 1320px;
+  min-width: 320px;
 }
 
 a {
@@ -80,8 +80,8 @@ h1, h2, h3, h4, p {
 }
 
 .container {
-  width: var(--container);
-  margin: 0 auto;
+  width: min(var(--container), 100% - 32px);
+  margin-inline: auto;
 }
 
 .num {
@@ -385,4 +385,20 @@ textarea.input {
 ::-webkit-scrollbar-thumb {
   background: #d9d9d9;
   border-radius: 4px;
+}
+
+/* ---------- 移动端（≤900px）通用收敛 ---------- */
+@media (max-width: 900px) {
+  .breadcrumb {
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+  }
+  .breadcrumb > * {
+    flex: none;
+  }
+  .table-wrap,
+  .table-scroll {
+    overflow-x: auto;
+  }
 }

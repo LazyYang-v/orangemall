@@ -4,3 +4,10 @@
 dist/
 node_modules/
 target/
+/backend/deploy/.env
+# Playwright
+frontend/playwright-report/
+frontend/test-results/
+
+# bench：线程快照含容器日志，体积大，本地排查用（bench/profile-drain.sh 生成）
+bench/results/raw/dump-*.txt

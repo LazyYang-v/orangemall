@@ -1,0 +1,12 @@
+活动 S1793923200000-101501  库存 Redis=306 DB=306  EXHAUSTED 死信 0
+1) 停止 mall-order
+2) 3 个压测用户抢购
+   用户 4980 → code 0（0=排队中）
+   用户 4981 → code 0（0=排队中）
+   用户 4982 → code 0（0=排队中）
+   扣减后：Redis=303 DB=303  seckill_order(演练用户)=3
+3) 等待重试耗尽（约 23s）与补偿
+   补偿后：Redis=306 DB=306  在途=0  seckill_order(演练用户)=0  EXHAUSTED 死信 0 → 3
+   用户结果：{"state":"FAILED","reason":"系统繁忙，请重试"}
+4) 拉起 mall-order
+  ✓ 重试耗尽 → 补偿一致（库存回到 Redis=306 DB=306、成交记录已删、死信 +3、结果 FAILED）

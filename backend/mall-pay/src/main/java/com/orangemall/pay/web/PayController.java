@@ -24,18 +24,18 @@ public class PayController {
 
     @GetMapping("/payments/{paymentNo}")
     public Result<Map<String, Object>> status(@PathVariable String paymentNo) {
-        return Result.ok(pay.status(paymentNo));
+        return Result.ok(pay.status(UserContext.requireUser(), paymentNo));
     }
 
     @PostMapping("/payments/{paymentNo}/sandbox-pay")
     public Result<Map<String, Object>> sandboxPay(@PathVariable String paymentNo, @RequestBody Map<String, Object> body) {
-        UserContext.requireUser();
-        return Result.ok(pay.sandboxPay(paymentNo, Boolean.TRUE.equals(body.get("success"))));
+        return Result.ok(pay.sandboxPay(UserContext.requireUser(), paymentNo, Boolean.TRUE.equals(body.get("success"))));
     }
 
     @PostMapping("/payments/notify")
     public Result<Map<String, Object>> notify(@RequestBody Map<String, Object> body) {
-        return Result.ok(pay.notify(String.valueOf(body.get("paymentNo")),
+        Long refundId = body.get("refundId") == null ? null : Long.parseLong(String.valueOf(body.get("refundId")));
+        return Result.ok(pay.notify(String.valueOf(body.get("paymentNo")), refundId,
                 ((Number) body.get("amount")).intValue(),
                 String.valueOf(body.get("tradeStatus")), String.valueOf(body.get("sign"))));
     }

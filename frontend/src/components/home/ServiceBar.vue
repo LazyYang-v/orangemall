@@ -55,4 +55,11 @@ p {
   font-size: 12px;
   color: var(--c-text-3);
 }
+@media (max-width: 900px) {
+  .svc { grid-template-columns: repeat(2, minmax(0, 1fr)); height: auto; padding: 6px 0; }
+  .item { justify-content: flex-start; padding: 8px 14px; gap: 8px; }
+  .item + .item::before { display: none; }
+  b { font-size: 13px; }
+  p { font-size: 11px; white-space: nowrap; }
+}
 </style>

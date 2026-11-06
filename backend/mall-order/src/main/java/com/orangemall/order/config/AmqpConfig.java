@@ -81,12 +81,31 @@ public class AmqpConfig {
 
     @Bean
     public Queue closeQueue() {
-        return QueueBuilder.durable(Const.MQ_ORDER_CLOSE_QUEUE).build();
+        return QueueBuilder.durable(Const.MQ_ORDER_CLOSE_QUEUE)
+                .withArgument("x-dead-letter-exchange", Const.MQ_ORDER_CLOSE_DLX_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", Const.MQ_ORDER_CLOSE_KEY)
+                .build();
     }
 
     @Bean
     public Binding bClose() {
         return BindingBuilder.bind(closeQueue()).to(closeExchange()).with(Const.MQ_ORDER_CLOSE_KEY);
+    }
+
+    /** close 队列消费失败死信（OM-003） */
+    @Bean
+    public DirectExchange closeDlx() {
+        return new DirectExchange(Const.MQ_ORDER_CLOSE_DLX_EXCHANGE, true, false);
+    }
+
+    @Bean
+    public Queue closeDlq() {
+        return QueueBuilder.durable(Const.MQ_ORDER_CLOSE_DLQ).build();
+    }
+
+    @Bean
+    public Binding bCloseDlq() {
+        return BindingBuilder.bind(closeDlq()).to(closeDlx()).with(Const.MQ_ORDER_CLOSE_KEY);
     }
 
     @Bean
@@ -96,11 +115,30 @@ public class AmqpConfig {
 
     @Bean
     public Queue paySuccessQueue() {
-        return QueueBuilder.durable(Const.MQ_PAY_SUCCESS_QUEUE).build();
+        return QueueBuilder.durable(Const.MQ_PAY_SUCCESS_QUEUE)
+                .withArgument("x-dead-letter-exchange", Const.MQ_PAY_DLX_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", Const.MQ_PAY_DLQ_KEY)
+                .build();
+    }
+
+    /** pay 成功队列消费失败死信（OM-003） */
+    @Bean
+    public DirectExchange payDlx() {
+        return new DirectExchange(Const.MQ_PAY_DLX_EXCHANGE, true, false);
+    }
+
+    @Bean
+    public Queue payDlq() {
+        return QueueBuilder.durable(Const.MQ_PAY_DLQ).build();
     }
 
     @Bean
     public Binding bPay() {
         return BindingBuilder.bind(paySuccessQueue()).to(payExchange()).with(Const.MQ_PAY_SUCCESS_KEY);
+    }
+
+    @Bean
+    public Binding bPayDlq() {
+        return BindingBuilder.bind(payDlq()).to(payDlx()).with(Const.MQ_PAY_DLQ_KEY);
     }
 }

@@ -23,6 +23,9 @@ public class Payment {
     private Instant expireAt;
     private int callbackCount;
     private Instant paidAt;
+    /** 关联退款流水号（refund_order.id；售后退款后写入） */
+    private String refundNo;
+    private int refundedAmount;
     private Instant createdAt;
     private Instant updatedAt;
 }

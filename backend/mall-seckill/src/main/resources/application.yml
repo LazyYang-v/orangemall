@@ -30,6 +30,8 @@ spring:
       discovery:
         server-addr: ${NACOS_ADDR:localhost:8848}
     openfeign:
+      okhttp:
+        enabled: true
       client:
         config:
           default:
@@ -84,3 +86,9 @@ seckill:
   result-ttl-seconds: 86400
   # 后台缓存命中率读取的 Redis Hash（商品详情 Cache Aside 统计：field hit / miss）
   cache-stats-key: cache:stats
+  # OM-013 在途滞留：持续不变超过该秒数告警；无积压时自动重置（泄漏）
+  inflight-stuck-seconds: ${SECKILL_INFLIGHT_STUCK_SECONDS:180}
+  inflight-auto-reset: ${SECKILL_INFLIGHT_AUTO_RESET:true}
+  # OM-025 落单吞吐：主题分区数（只增不减）与消费线程数；消息按 userId 分区
+  topic-partitions: ${SECKILL_TOPIC_PARTITIONS:12}
+  consumer-concurrency: ${SECKILL_CONSUMER_CONCURRENCY:12}

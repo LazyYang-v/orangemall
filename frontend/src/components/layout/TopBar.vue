@@ -90,4 +90,25 @@ i {
   height: 12px;
   background: #d0d0d0;
 }
+@media (max-width: 900px) {
+  .topbar {
+    font-size: 12px;
+  }
+  .inner {
+    justify-content: center;
+  }
+  .left .loc,
+  .left .hl,
+  .right,
+  .left .hi a {
+    display: none;
+  }
+  .left .link {
+    display: none;
+  }
+  .left .hi a {
+    display: inline;
+    color: var(--c-primary);
+  }
+}
 </style>

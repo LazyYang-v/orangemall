@@ -7,6 +7,7 @@ import { toast } from '@/utils/toast'
 import { yuan, formatTime } from '@/utils/format'
 import { SECKILL_STATUS } from '@/utils/dict'
 import ProductArt from '@/components/common/ProductArt.vue'
+import SeckillReliability from '@/components/admin/SeckillReliability.vue'
 
 type Sess = SeckillSession & { items: AdminSeckillItem[] }
 const sessions = ref<Sess[]>([])
@@ -105,6 +106,8 @@ const oversold = (i: AdminSeckillItem) => i.redisStock !== null && i.redisStock 
         <p v-else class="muted">选择一个「抢购中」的活动，点击「模拟抢购」，用 N 个并发请求验证不超卖。</p>
       </div>
     </div>
+
+    <SeckillReliability />
 
     <div v-for="s in sessions" :key="s.id" class="adm-card">
       <h3>

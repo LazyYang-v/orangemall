@@ -1,0 +1,14 @@
+活动            S1793916000000-100501
+总库存 / DB 剩余 / Redis 剩余 / 在途   1000 / 0 / 0 / 0
+库存消耗(总-DB) 1000
+seckill_order   1000（重复用户 0）
+订单(mall_order) 1000
+Redis 已购集合  1000
+死信            0
+成交时间窗      07:16:30.878000 → 07:17:29.412000（58.534s）
+awk: syntax error at source line 1
+ context is
+	BEGIN >>>  1000 <<<  / 58.534
+awk: bailing out at source line 1
+落单吞吐         单/s（成交行数 / 首末成交时间差） 落单吞吐         单/s（成交行数 / 首末成交时间差）
+✓ 无超卖：库存消耗 = 成交 = 订单，Redis/DB 一致，无一人多单

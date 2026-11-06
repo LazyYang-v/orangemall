@@ -1,0 +1,27 @@
+time="2026-11-06T00:00:27Z" level=warning msg="Insufficient VUs, reached 2000 active VUs and cannot initialize more" executor=constant-arrival-rate scenario=reject
+
+     ✓ rejected (7003/4290)
+
+     biz_code.......................: 77310   2575.517453/s
+     checks.........................: 100.00% 77310 out of 77310
+     data_received..................: 20 MB   663 kB/s
+     data_sent......................: 34 MB   1.1 MB/s
+     dropped_iterations.............: 12688   422.69002/s
+     http_req_blocked...............: avg=220.17µs med=3.7µs   p(90)=7.37µs   p(95)=12.58µs  p(99)=2.01ms   max=203.91ms
+     http_req_connecting............: avg=126.68µs med=0s      p(90)=0s       p(95)=0s       p(99)=1.14ms   max=108.77ms
+     http_req_duration..............: avg=213.58ms med=17.51ms p(90)=641.36ms p(95)=1.05s    p(99)=2.16s    max=2.78s   
+       { expected_response:true }...: avg=213.58ms med=17.51ms p(90)=641.36ms p(95)=1.05s    p(99)=2.16s    max=2.78s   
+     ✗ { name:submit }..............: avg=201.26ms med=16.07ms p(90)=603.83ms p(95)=1s       p(99)=2.13s    max=2.68s   
+   ✓ http_req_failed................: 0.00%   0 out of 79313
+     http_req_receiving.............: avg=7.67ms   med=71.87µs p(90)=10.07ms  p(95)=36.89ms  p(99)=184.67ms max=890.98ms
+     http_req_sending...............: avg=1.74ms   med=12.16µs p(90)=159.32µs p(95)=830.75µs p(99)=52.13ms  max=764.19ms
+     http_req_tls_handshaking.......: avg=0s       med=0s      p(90)=0s       p(95)=0s       p(99)=0s       max=0s      
+     http_req_waiting...............: avg=204.15ms med=16.6ms  p(90)=605.97ms p(95)=1.03s    p(99)=2.12s    max=2.74s   
+     http_reqs......................: 79313   2642.245709/s
+     iteration_duration.............: avg=224.75ms med=16.32ms p(90)=673.14ms p(95)=1.14s    p(99)=2.25s    max=3.14s   
+     iterations.....................: 77312   2575.584082/s
+   ✓ rejected_ok....................: 100.00% 77310 out of 77310
+     vus............................: 195     min=4              max=1907
+     vus_max........................: 2000    min=947            max=2000
+
+time="2026-11-06T00:00:52Z" level=error msg="thresholds on metrics 'http_req_duration{name:submit}' have been crossed"

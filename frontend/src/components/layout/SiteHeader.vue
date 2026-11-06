@@ -181,4 +181,42 @@ function search(kw = keyword.value) {
   text-align: center;
   border: 1.5px solid #fff;
 }
+@media (max-width: 900px) {
+  .inner {
+    flex-wrap: wrap;
+    height: auto;
+    padding-block: 10px 12px;
+    gap: 10px;
+    justify-content: space-between;
+  }
+  .brand .slogan {
+    display: none;
+  }
+  .search-area {
+    order: 3;
+    flex-basis: 100%;
+    min-width: 0;
+    padding-top: 0;
+  }
+  .search {
+    height: 40px;
+  }
+  .go {
+    width: 84px;
+    font-size: 15px;
+  }
+  .shortcuts {
+    gap: 20px;
+  }
+  .sc span {
+    font-size: 11px;
+  }
+  .sc:nth-child(2) {
+    display: none;
+  }
+}
+@media (max-width: 900px) {
+  .hot { max-width: 100%; min-width: 0; flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+  .hot a { flex: none; }
+}
 </style>

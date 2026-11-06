@@ -11,6 +11,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.cloud.openfeign.EnableFeignClients;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.Ordered;
@@ -45,10 +46,21 @@ public class WebAutoConfiguration {
         return r;
     }
 
-    /** Feign 调用透传用户身份与 traceId（Seata XID 由 seata starter 自动透传） */
+    /** /inner/** 内部密钥校验（缺省 dev-inner-key；部署注入 INNER_SECRET 覆盖） */
     @Bean
-    public RequestInterceptor mallFeignInterceptor() {
+    public FilterRegistrationBean<InnerKeyFilter> mallInnerKeyFilter(
+            @Value("${mall.inner-key:${INNER_SECRET:dev-inner-key}}") String innerKey) {
+        FilterRegistrationBean<InnerKeyFilter> r = new FilterRegistrationBean<>(new InnerKeyFilter(innerKey));
+        r.setOrder(Ordered.HIGHEST_PRECEDENCE + 11);
+        return r;
+    }
+
+    /** Feign 调用透传用户身份与 traceId（Seata XID 由 seata starter 自动透传），并携带内部密钥 */
+    @Bean
+    public RequestInterceptor mallFeignInterceptor(
+            @Value("${mall.inner-key:${INNER_SECRET:dev-inner-key}}") String innerKey) {
         return t -> {
+            t.header(Const.H_INNER_KEY, innerKey);
             if (UserContext.userId() != null) t.header(Const.H_USER_ID, String.valueOf(UserContext.userId()));
             if (UserContext.role() != null) t.header(Const.H_USER_ROLE, UserContext.role());
             if (UserContext.traceId() != null) t.header(Const.H_TRACE, UserContext.traceId());

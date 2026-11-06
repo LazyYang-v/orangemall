@@ -100,6 +100,14 @@ h1 {
   gap: 12px;
   margin-top: 20px;
 }
+@media (max-width: 900px) {
+  .layers {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .banner p {
+    font-size: 12px;
+  }
+}
 .layer {
   display: flex;
   align-items: center;
@@ -247,5 +255,16 @@ h3 {
 .go.over {
   background: #eee;
   color: #999;
+}
+@media (max-width: 900px) {
+  .list { grid-template-columns: minmax(0, 1fr); }
+  .item { gap: 12px; padding: 12px; }
+  .item > :first-child { flex: none; width: 96px; height: 96px; }
+  .pr { flex-wrap: wrap; }
+  .pr .price { font-size: 22px; }
+  .prog { width: 100%; padding-right: 72px; }
+  .sessions { overflow-x: auto; }
+  .sessions a { flex: 0 0 auto; min-width: 76px; padding: 8px 10px; }
+  .layers > * { min-width: 0; }
 }
 </style>

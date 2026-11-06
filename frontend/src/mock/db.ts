@@ -37,7 +37,7 @@ export interface SeckillMetrics {
 
 export interface OpsLog {
   time: string
-  type: 'CACHE' | 'MQ' | 'PAY' | 'SECKILL' | 'ORDER' | 'RISK'
+  type: 'CACHE' | 'MQ' | 'PAY' | 'SECKILL' | 'ORDER' | 'RISK' | 'ALERT' | 'REFUND'
   text: string
 }
 

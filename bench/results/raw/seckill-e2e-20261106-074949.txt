@@ -1,0 +1,24 @@
+
+     data_received..................: 5.5 MB 1.0 MB/s
+     data_sent......................: 5.2 MB 970 kB/s
+     http_req_blocked...............: avg=5.95ms   med=2.29µs   p(90)=8.62µs   p(95)=34.31ms  p(99)=165.39ms max=213.3ms 
+     http_req_connecting............: avg=2.24ms   med=0s       p(90)=0s       p(95)=18.71ms  p(99)=64.13ms  max=116.97ms
+     http_req_duration..............: avg=332.02ms med=322.4ms  p(90)=616.36ms p(95)=746.98ms p(99)=880.62ms max=1.05s   
+       { expected_response:true }...: avg=332.02ms med=322.4ms  p(90)=616.36ms p(95)=746.98ms p(99)=880.62ms max=1.05s   
+     ✗ { name:submit }..............: avg=368.11ms med=352.31ms p(90)=582.17ms p(95)=670.63ms p(99)=804.11ms max=1s      
+     http_req_failed................: 0.00%  0 out of 15000
+     http_req_receiving.............: avg=8.19ms   med=1.01ms   p(90)=26.13ms  p(95)=43.5ms   p(99)=77.25ms  max=197.49ms
+     http_req_sending...............: avg=1.17ms   med=9µs      p(90)=44.5µs   p(95)=736.59µs p(99)=27.8ms   max=128.18ms
+     http_req_tls_handshaking.......: avg=0s       med=0s       p(90)=0s       p(95)=0s       p(99)=0s       max=0s      
+     http_req_waiting...............: avg=322.65ms med=311.56ms p(90)=604.72ms p(95)=739.68ms p(99)=870.22ms max=1.04s   
+     http_reqs......................: 15000  2808.392856/s
+     iteration_duration.............: avg=1.01s    med=960.43ms p(90)=1.48s    p(95)=1.72s    p(99)=2.05s    max=2.53s   
+     iterations.....................: 5000   936.130952/s
+     orders_queued..................: 1000   187.22619/s
+     outcome........................: 5000   936.130952/s
+     sold_out.......................: 4000   748.904762/s
+   ✓ unexpected.....................: 0      0/s
+     vus............................: 1000   min=1000       max=1000
+     vus_max........................: 1000   min=1000       max=1000
+
+time="2026-11-05T23:49:55Z" level=error msg="thresholds on metrics 'http_req_duration{name:submit}' have been crossed"

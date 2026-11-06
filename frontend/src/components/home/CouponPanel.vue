@@ -155,4 +155,7 @@ h3 {
   background: #ffd2b5;
   cursor: default;
 }
+@media (max-width: 900px) {
+  .list > * { min-width: 0; }
+}
 </style>

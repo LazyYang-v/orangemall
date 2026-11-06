@@ -616,4 +616,23 @@ h1 {
   grid-template-columns: repeat(5, 1fr);
   gap: 14px;
 }
+@media (max-width: 900px) {
+  .main { flex-direction: column; gap: 16px; padding: 12px; }
+  .gallery { width: 100%; }
+  .big { padding: 12px; }
+  .info { width: 100%; }
+  .buy { padding: 12px 0 4px; }
+  .buy .btn { flex: 1; width: auto; min-width: 0; padding: 0 8px; font-size: 15px; }
+  .lower { flex-direction: column; align-items: stretch; }
+  .side { width: 100%; }
+  .row, .rows, .vals { flex-wrap: wrap; }
+}
+@media (max-width: 900px) {
+  .tabs-wrap { min-width: 0; width: 100%; }
+  .detail { padding: 12px; }
+  .poster { flex-direction: column; gap: 12px; padding: 16px; text-align: center; }
+  .poster h3 { font-size: 20px; }
+  .params { margin: 12px; width: calc(100% - 24px); }
+  .params th { width: 88px; }
+}
 </style>

@@ -1,10 +1,14 @@
 package com.orangemall.order.web;
 
 import com.orangemall.api.dto.OrderBrief;
+import com.orangemall.api.dto.RefundStateReq;
 import com.orangemall.api.dto.SeckillOrderReq;
+import com.orangemall.api.dto.StockItem;
 import com.orangemall.common.Result;
 import com.orangemall.order.service.OrderService;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /** 服务间 inner 接口（只在内网被 Feign 调用） */
 @RestController
@@ -19,6 +23,16 @@ public class InnerOrderController {
     @GetMapping("/orders/{id}")
     public Result<OrderBrief> brief(@PathVariable long id) {
         return Result.ok(orders.brief(id));
+    }
+
+    @GetMapping("/orders/{id}/items")
+    public Result<List<StockItem>> items(@PathVariable long id) {
+        return Result.ok(orders.items(id));
+    }
+
+    @PostMapping("/orders/{id}/refund-state")
+    public Result<Boolean> refundState(@PathVariable long id, @RequestBody RefundStateReq req) {
+        return Result.ok(orders.refundTransition(id, req == null ? null : req.from(), req == null ? null : req.to()));
     }
 
     @PostMapping("/orders/seckill")

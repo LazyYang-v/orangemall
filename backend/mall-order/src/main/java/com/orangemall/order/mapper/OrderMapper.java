@@ -37,6 +37,9 @@ public interface OrderMapper {
         private String source;
         private String keyword;
         private boolean adminKeyword;
+        /** 管理端关键词分流（OM-015）：ID=主键精确 / PHONE=手机号前缀 / RECEIVER=收货人前缀，均可走索引 */
+        private String keywordMode;
+        private Long keywordId;
         private int offset;
         private int size;
     }
@@ -63,6 +66,10 @@ public interface OrderMapper {
     int complete(@Param("s") String s, @Param("id") long id, @Param("now") Instant now, @Param("logistics") String logistics);
 
     int expireNow(@Param("s") String s, @Param("id") long id, @Param("deadline") Instant deadline);
+
+    /** 售后状态流转（from 为空 = 无条件，调用方先校验合法性）；返回 affected rows */
+    int refundState(@Param("s") String s, @Param("id") long id, @Param("from") String from, @Param("to") String to,
+                    @Param("now") Instant now);
 
     List<OrderRow> list(@Param("q") ListQuery q);
 
