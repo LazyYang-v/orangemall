@@ -48,12 +48,16 @@ mall-gateway :18080（Spring Cloud Gateway）
 ### 3.1 order（最复杂：分片 + 事务 + 异步关单）
 - **分片**：`t_order_{0..3}` / `t_order_item_{0..3}` / `_archive`，分片键 `user_id & 3`；
   用户侧读写按 `Shard.of(userId)` 定位；管理端 `Shard.ALL` UNION ALL 聚合 + 全局排序分页。
-- **下单** `@GlobalTransactional`：submitToken 防重（Redis SETNX 15min）→ 风险预检（creditScore<300 或
-  风控黑名单拒绝 5009）→ 校验地址/券（UNUSED 4005）/库存 → product.deduct → marketing.lock →
-  user.changePoints（负扣）→ 落库（雪花 id，items 逐单插）→ 购物车剔除（best-effort）→
-  发 30s/10s TTL 消息。任一步失败，Seata 回滚还原库存/券/积分（已实测）。
+- **下单** `@GlobalTransactional`（`order-submit`，超时 10s）：submitToken 防重（Redis SETNX 15min）→ 风险预检（creditScore<300 或
+  风控黑名单拒绝 5009）→ 校验地址/券（UNUSED 4005）→ 快照库存预检（3001，开分支前失败）→ marketing.lock →
+  user.changePoints（负扣）→ 落库（主表 + 明细同一本地事务 = 一个分支）→ **product.deduct 最后**（AT 全局行锁从分支注册
+  持有到全局提交，热点 SKU 越晚上锁越好）→ 购物车剔除（best-effort）→ 发 30s/10s TTL 消息。任一步失败，Seata 回滚还原库存/券/积分（已实测）。
+- **库存流水**（Phase 5，`mall_product.stock_ledger`，唯一键 `(order_id, sku_id, op)`）：`/inner/stock/deduct|restore` 入参带
+  `orderId`；扣减先记 `DEDUCT` 再条件 UPDATE（同单重放跳过），回补先记 `RESTORE`（重复回补被唯一键挡住）且件数以 DEDUCT 流水为准；
+  V3 之前创建、没有流水的历史订单按请求件数回补一次。关单与退款两条回补路径都经过它。
 - **TTL 关单**：RabbitMQ `order.delay.exchange` → `order.delay.10m/30m`（TTL 队列）→ DLX
-  `order.close.exchange` → `order.close.queue` 监听关闭：CAS 校验 PENDING → 库存回滚（仅在场商品）→
+  `order.close.exchange` → `order.close.queue` 监听关闭：CAS 校验 PENDING → 库存回滚（仅在场商品，按订单幂等；同步重试 3 次，
+  仍失败则进 Redis 延迟集合 `order:restore:retry`，后台按 5/15/30/60s 重试，耗尽才 ALERT）→
   券释放 → 积分回退 → ops 日志 + WebSocket。
 - **物流模拟**：发货后定时器 12s/步推进（揽收→运输→派送→签收），每步 ops.log + WebSocket
   `LOGISTICS_UPDATE` 推送（快递鸟真实订阅的替代实现，见 §4）。

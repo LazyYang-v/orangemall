@@ -7,6 +7,7 @@ import com.orangemall.api.client.ProductInnerClient;
 import com.orangemall.api.dto.OrderBrief;
 import com.orangemall.api.dto.RefundStateReq;
 import com.orangemall.api.dto.StockItem;
+import com.orangemall.api.dto.StockOpReq;
 import com.orangemall.common.BizException;
 import com.orangemall.common.IdGenerator;
 import com.orangemall.common.PageResult;
@@ -216,7 +217,8 @@ public class RefundService {
         }
         if (!"EXCHANGE".equals(r.getType())) {
             List<StockItem> items = orders.items(r.getOrderId()).unwrap();
-            product.restore(items).unwrap();
+            // 按订单幂等（stock_ledger RESTORE 唯一键）：回调重放 / 重试不会重复回补
+            product.restore(new StockOpReq(r.getOrderId(), items)).unwrap();
         }
         orders.refundState(r.getOrderId(), new RefundStateReq("REFUND_APPLYING", "REFUNDED")).unwrap();
         ops.log("REFUND", "[完成] 售后单 " + refundId + " 订单 " + r.getOrderId() + " → 已退款，库存已回补，金额 ¥" + cen(amount));

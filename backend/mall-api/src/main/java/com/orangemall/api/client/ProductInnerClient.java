@@ -1,7 +1,7 @@
 package com.orangemall.api.client;
 
 import com.orangemall.api.dto.SkuInfo;
-import com.orangemall.api.dto.StockItem;
+import com.orangemall.api.dto.StockOpReq;
 import com.orangemall.common.Result;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,11 +15,17 @@ public interface ProductInnerClient {
     @PostMapping("/skus/batch")
     Result<List<SkuInfo>> skus(@RequestBody List<Long> skuIds);
 
-    /** 扣减库存：UPDATE sku SET stock=stock-n, sales=sales+n WHERE id=? AND stock>=n；任一失败抛 3001（Seata AT 分支） */
+    /**
+     * 扣减库存并记 DEDUCT 流水（Seata AT 分支）：UPDATE sku SET stock=stock-n … WHERE stock>=n，任一失败抛 3001。
+     * 同一订单重复调用幂等（已有流水即视为已扣）。
+     */
     @PostMapping("/stock/deduct")
-    Result<Boolean> deduct(@RequestBody List<StockItem> items);
+    Result<Boolean> deduct(@RequestBody StockOpReq req);
 
-    /** 回补库存（关单），sales 同步回退 */
+    /**
+     * 回补库存（关单 / 退款），sales 同步回退。按订单幂等：每个 SKU 只回补一次，件数以该订单 DEDUCT 流水为准；
+     * 返回实际回补的 SKU 行数（0 = 早已回补过 / 从未扣减）。
+     */
     @PostMapping("/stock/restore")
-    Result<Boolean> restore(@RequestBody List<StockItem> items);
+    Result<Integer> restore(@RequestBody StockOpReq req);
 }

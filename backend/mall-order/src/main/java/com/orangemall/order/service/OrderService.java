@@ -56,6 +56,7 @@ public class OrderService {
     private final com.fasterxml.jackson.databind.ObjectMapper om;
     private final OpsLogger ops;
     private final Notifier notifier;
+    private final org.springframework.transaction.support.TransactionTemplate tx;
 
     /* ============================ 计价行 ============================ */
     private record Line(SkuInfo sku, int count) {
@@ -72,7 +73,8 @@ public class OrderService {
         Map<Long, SkuInfo> skus = new HashMap<>();
         for (SkuInfo s : product.skus(ids).unwrap()) skus.put(s.skuId(), s);
         List<Line> lines = new ArrayList<>();
-        for (long id : ids) {
+        // 按去重后的 SKU 建行：同一 SKU 在请求里出现多次时合并为一行（修复前会生成多行、每行都是合并后的件数 → 重复计价与扣减）
+        for (long id : counts.keySet()) {
             SkuInfo s = skus.get(id);
             if (s == null) throw new BizException(2001, "商品不存在");
             lines.add(new Line(s, counts.get(id)));
@@ -174,7 +176,9 @@ public class OrderService {
     }
 
     /* ============================ 提交 ============================ */
-    @GlobalTransactional(rollbackFor = Exception.class, name = "order-submit")
+    // 全局事务超时 10s（Seata 默认 60s）：TM 来不及上报回滚的在途事务（如发起它的 TC 宕机）由 TC 超时回滚，
+    // 期间它持有的 SKU 全局锁会挡住同一 SKU 的所有新订单，超时即这段窗口的上限。压测下提交 p95 ≈ 1.3s、最慢 ≈ 3s。
+    @GlobalTransactional(rollbackFor = Exception.class, name = "order-submit", timeoutMills = 10_000)
     public Map<String, Object> submit(long userId, Map<String, Object> body) {
         String token = String.valueOf(body.get("submitToken"));
         Boolean first = redis.delete("order:submit:" + token);
@@ -194,11 +198,10 @@ public class OrderService {
                     .orElseThrow(() -> new BizException(4005, "优惠券不可用"));
         }
         Pricing.Calc calc = calc(lines, coupon, body.get("pointsUsed") == null ? 0 : ((Number) body.get("pointsUsed")).intValue(), brief.points());
-
-        // Seata 分支：扣库存 → 锁券 → 扣积分，任一失败全局回滚
-        product.deduct(lines.stream().map(l -> new StockItem(l.sku().skuId(), l.count())).toList()).unwrap();
-        if (coupon != null) marketing.lock(new CouponOpReq(userId, coupon.id(), null)).unwrap();
-        if (calc.pointsUsed() > 0) userClient.changePoints(new PointsChangeReq(userId, -calc.pointsUsed(), "订单积分抵扣")).unwrap();
+        // 快照库存预检：明显不够时在开任何分支前失败（扣减本身仍以商品服务的条件 UPDATE 为准）
+        for (Line l : lines) {
+            if (l.sku().stock() < l.count()) throw new BizException(3001, "「" + l.sku().name() + "」库存不足");
+        }
 
         long orderId = IdGenerator.nextId(userId & 3);
         String shard = Shard.of(orderId);
@@ -223,7 +226,7 @@ public class OrderService {
         o.setPayDeadline(now.plus(Duration.ofMinutes(ORDER_TTL_MINUTES)));
         o.setCreatedAt(now);
         o.setUpdatedAt(now);
-        orderMapper.insertOrder(shard, o);
+        List<OrderItemRow> items = new ArrayList<>();
         for (Line l : lines) {
             OrderItemRow i = new OrderItemRow();
             i.setId(IdGenerator.nextId());
@@ -237,8 +240,18 @@ public class OrderService {
             i.setTint(l.sku().tint());
             i.setPrice(l.sku().price());
             i.setCount(l.count());
-            orderMapper.insertItem(shard, i);
+            items.add(i);
         }
+
+        // Seata 分支顺序（Phase 5）：锁券 → 扣积分 → 建单（主表 + 明细同一本地事务 = 一个分支）→ 扣库存放最后。
+        // AT 的全局行锁从分支注册持有到全局提交：扣库存越晚，热点 SKU 行被锁住的时间越短；任一失败全局回滚。
+        if (coupon != null) marketing.lock(new CouponOpReq(userId, coupon.id(), null)).unwrap();
+        if (calc.pointsUsed() > 0) userClient.changePoints(new PointsChangeReq(userId, -calc.pointsUsed(), "订单积分抵扣")).unwrap();
+        tx.executeWithoutResult(st -> {
+            orderMapper.insertOrder(shard, o);
+            for (OrderItemRow i : items) orderMapper.insertItem(shard, i);
+        });
+        product.deduct(new StockOpReq(orderId, lines.stream().map(l -> new StockItem(l.sku().skuId(), l.count())).toList())).unwrap();
         // 下单成功移除购物车中已购商品（Redis 不参与 Seata，失败可接受）
         if (Boolean.TRUE.equals(body.get("fromCart"))) {
             try {
@@ -384,11 +397,7 @@ public class OrderService {
         if (rows == 0) return;
         if ("NORMAL".equals(o.getSource())) {
             List<OrderItemRow> items = orderMapper.findItems(o.getSrc(), List.of(o.getId()));
-            try {
-                product.restore(items.stream().map(i -> new StockItem(i.getSkuId(), i.getCount())).toList()).unwrap();
-            } catch (Exception e) {
-                ops.log("MQ", "[关单补偿失败] 订单 " + o.getId() + " 库存回补异常：" + e.getMessage());
-            }
+            restoreStock(o.getId(), items.stream().map(i -> new StockItem(i.getSkuId(), i.getCount())).toList());
         }
         if (o.getCouponId() != null) {
             try {
@@ -404,6 +413,80 @@ public class OrderService {
         }
         ops.log("MQ", "[DLX 消费] 订单 " + o.getId() + " " + reason + "，已回补库存/释放优惠券");
         notifier.orderStatus(o.getUserId(), o.getId(), status, reason);
+    }
+
+    /** 关单回补的同步重试间隔：商品侧单次最多等全局锁 4s，三次覆盖 order-submit 的 10s 全局超时（测试里置零） */
+    long[] restoreBackoffMs = {500, 1500};
+    /** 同步重试仍失败 → 转后台重试（Redis 延迟集合，Jobs 每 5s 扫一次），每次失败后的等待；全部失败才告警（共约 2 分钟） */
+    long[] restoreRetryDelayMs = {5_000, 15_000, 30_000, 60_000};
+    static final String RESTORE_RETRY = "order:restore:retry";
+    static final String RESTORE_RETRY_N = "order:restore:retry:n";
+
+    /**
+     * 关单回补库存：CAS 已把订单改走，这里失败就再没有别的路径会回补，所以重试。
+     * 商品侧按订单记 RESTORE 流水，重复调用（包括「超时但其实已成功」的那次）不会多补。
+     * 典型失败是同一 SKU 行被某个未决的下单全局事务占着全局锁（如 TC 宕机后等超时回滚），商品侧 @GlobalLock 等不到即失败。
+     * 同步只试 3 次（不能让用户取消请求 / MQ 消费线程长时间阻塞）；TC 故障切换可能超过这个窗口（HA 演练实测约 20s），
+     * 所以之后转入 Redis 延迟集合由后台继续重试，进程重启也不丢。
+     */
+    void restoreStock(long orderId, List<StockItem> items) {
+        Exception last = null;
+        for (int attempt = 0; attempt <= restoreBackoffMs.length; attempt++) {
+            try {
+                product.restore(new StockOpReq(orderId, items)).unwrap();
+                return;
+            } catch (Exception e) {
+                last = e;
+                if (attempt == restoreBackoffMs.length) break;
+                try {
+                    Thread.sleep(restoreBackoffMs[attempt]);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+        String reason = last == null ? "" : last.getMessage();
+        try {
+            redis.opsForZSet().add(RESTORE_RETRY, String.valueOf(orderId), System.currentTimeMillis() + restoreRetryDelayMs[0]);
+            ops.log("ORDER", "[关单补偿延后] 订单 " + orderId + " 库存回补同步重试失败，转后台重试：" + reason);
+        } catch (Exception e) {
+            ops.log("ALERT", "[关单补偿失败] 订单 " + orderId + " 库存回补重试耗尽且无法登记后台重试，需人工按 stock_ledger 核对：" + reason);
+        }
+    }
+
+    /** 后台重试到期的关单回补（Jobs 定时调用）；返回本轮处理的订单数 */
+    public int retryPendingRestores() {
+        return retryPendingRestores(System.currentTimeMillis());
+    }
+
+    int retryPendingRestores(long now) {
+        Set<String> due = redis.opsForZSet().rangeByScore(RESTORE_RETRY, 0, now, 0, 50);
+        if (due == null || due.isEmpty()) return 0;
+        int handled = 0;
+        for (String member : due) {
+            Long removed = redis.opsForZSet().remove(RESTORE_RETRY, member);
+            if (removed == null || removed == 0) continue; // 被另一个实例领走
+            handled++;
+            long orderId = Long.parseLong(member);
+            try {
+                OrderRow o = findAny(orderId);
+                if (o == null) throw new IllegalStateException("订单不存在");
+                List<OrderItemRow> items = orderMapper.findItems(o.getSrc(), List.of(orderId));
+                product.restore(new StockOpReq(orderId, items.stream().map(i -> new StockItem(i.getSkuId(), i.getCount())).toList())).unwrap();
+                redis.opsForHash().delete(RESTORE_RETRY_N, member);
+                ops.log("ORDER", "[关单补偿完成] 订单 " + orderId + " 库存回补后台重试成功");
+            } catch (Exception e) {
+                long n = redis.opsForHash().increment(RESTORE_RETRY_N, member, 1);
+                if (n < restoreRetryDelayMs.length) {
+                    redis.opsForZSet().add(RESTORE_RETRY, member, now + restoreRetryDelayMs[(int) n]);
+                } else {
+                    redis.opsForHash().delete(RESTORE_RETRY_N, member);
+                    ops.log("ALERT", "[关单补偿失败] 订单 " + orderId + " 库存回补重试耗尽，需人工按 stock_ledger 核对：" + e.getMessage());
+                }
+            }
+        }
+        return handled;
     }
 
 

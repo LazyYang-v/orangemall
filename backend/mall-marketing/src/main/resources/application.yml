@@ -57,6 +57,17 @@ seata:
   config:
     type: file
   data-source-proxy-mode: AT
+  # TC RPC 超时（Phase 5 HA）：默认 RM 15s / TM 30s。TC 宕机瞬间已发出的请求收不到响应，要等满超时；
+  # 扣库存分支此时还持有 SKU 行锁，同 SKU 的下单全部排在它后面。正常 TC 往返为毫秒级，压测最慢整单 ≈ 3s，取 5s。
+  transport:
+    rpc-rm-request-timeout: ${SEATA_RPC_TIMEOUT:5000}
+    rpc-tm-request-timeout: ${SEATA_RPC_TIMEOUT:5000}
+  client:
+    # TC 选择（Phase 5 HA）：Seata 2.0 默认 XID 负载均衡把一个全局事务的所有请求都发回发起它的 TC；
+    # 那台 TC 宕机后、客户端下一轮重连摘除它之前，在途事务的回滚上报全部失败，其全局锁要等超时才释放。
+    # db 存储模式下任一 TC 都能处理任意 XID，改随机选择，回滚重试（默认 5 次）能落到存活的 TC 上立即释放锁。
+    load-balance:
+      type: ${SEATA_LOAD_BALANCE:RandomLoadBalance}
 
 # Phase 4（OM-018 / OM-020）：actuator 走独立管理端口 9104（只在容器网络内可达，网关路由不到 → 不对外暴露）。
 #   /actuator/health/readiness → compose healthcheck；/actuator/prometheus → Prometheus 抓取

@@ -53,6 +53,16 @@ public class Jobs {
         }
     }
 
+    /** 关单回补后台重试（同步重试失败的订单登记在 Redis 延迟集合，见 OrderService#restoreStock） */
+    @Scheduled(fixedDelay = 5_000, initialDelay = 15_000)
+    public void retryRestores() {
+        try {
+            orders.retryPendingRestores();
+        } catch (Exception e) {
+            log.warn("restore retry sweep failed: {}", e.getMessage());
+        }
+    }
+
     /** 物流轨迹模拟器：替代快递鸟订阅推送 */
     @Scheduled(fixedDelay = 5_000, initialDelay = 20_000)
     public void advanceLogistics() {

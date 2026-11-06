@@ -15,7 +15,8 @@ x-svc: &svc
     MYSQL_HOST: mysql
     REDIS_HOST: redis
     NACOS_ADDR: nacos:8848
-    SEATA_ADDR: seata:8091
+    # TC 地址列表（分号分隔）。HA（Phase 5）：.env 里设 SEATA_ADDR=seata:8091;seata-2:8091 并带 --profile ha 启动第二个 TC
+    SEATA_ADDR: ${SEATA_ADDR:-seata:8091}
     RABBIT_HOST: rabbitmq
     KAFKA_ADDR: kafka:9092
     # 密钥强制来自 .env（见 .env.example）：绝不把真实密钥写进仓库
@@ -116,8 +117,10 @@ services:
     image: orange-mall-seata:2.0.0-mysql8
     # OM-017：store.mode=db —— 全局事务/分支/全局锁落 MySQL seata 库（mysql/init/02-seata.sql），
     # TC 重启或容器重建后从库里恢复在途事务继续二阶段提交/回滚；file 模式下 sessionStore 在容器层，重建即丢。
-    environment:
+    environment: &seata-env
       SEATA_PORT: 8091
+      # 雪花算法 workerId：多个 TC 共用 seata 库时必须互不相同，否则两边生成的 transactionId / XID 可能撞号
+      SERVER_NODE: 1
       STORE_MODE: db
       SEATA_STORE_MODE: db
       SEATA_STORE_DB_DATASOURCE: hikari
@@ -139,6 +142,27 @@ services:
       mysql: { condition: service_healthy }
     healthcheck:
       # 控制台 7091 有响应 = Spring 容器已起；TC 端口 8091 在监听（/proc/net/tcp 中 1F9B = 8091）
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:7091/ && grep -qi ':1F9B ' /proc/net/tcp /proc/net/tcp6"]
+      interval: 5s
+      timeout: 3s
+      start_period: 30s
+      retries: 24
+
+  # TC 高可用（Phase 5，可选）：第二个 TC 与 seata 共用 MySQL seata 库（global/branch/lock_table + distributed_lock），
+  # 任一 TC 都能接手对方发起的全局事务的提交 / 回滚 / 重试；客户端按 SEATA_ADDR 连全部 TC，挂掉的一台由客户端摘除。
+  # 启用：.env 设 SEATA_ADDR=seata:8091;seata-2:8091，再 docker compose --profile app --profile ha up -d
+  # 不映射宿主机端口（客户端都在 compose 网络内）；约 330MB 内存，默认不启动。
+  seata-2:
+    image: orange-mall-seata:2.0.0-mysql8
+    profiles: ["ha"]
+    restart: unless-stopped
+    environment:
+      <<: *seata-env
+      SERVER_NODE: 2
+    depends_on:
+      mysql: { condition: service_healthy }
+      seata: { condition: service_healthy }
+    healthcheck:
       test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:7091/ && grep -qi ':1F9B ' /proc/net/tcp /proc/net/tcp6"]
       interval: 5s
       timeout: 3s
