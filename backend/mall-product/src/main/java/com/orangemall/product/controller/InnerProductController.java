@@ -1,7 +1,7 @@
 package com.orangemall.product.controller;
 
 import com.orangemall.api.dto.SkuInfo;
-import com.orangemall.api.dto.StockItem;
+import com.orangemall.api.dto.StockOpReq;
 import com.orangemall.common.Result;
 import com.orangemall.product.service.StockService;
 import lombok.RequiredArgsConstructor;
@@ -25,12 +25,12 @@ public class InnerProductController {
     }
 
     @PostMapping("/stock/deduct")
-    public Result<Boolean> deduct(@RequestBody List<StockItem> items) {
-        return Result.ok(stockService.deduct(items));
+    public Result<Boolean> deduct(@RequestBody StockOpReq req) {
+        return Result.ok(stockService.deduct(req));
     }
 
     @PostMapping("/stock/restore")
-    public Result<Boolean> restore(@RequestBody List<StockItem> items) {
-        return Result.ok(stockService.restore(items));
+    public Result<Integer> restore(@RequestBody StockOpReq req) {
+        return Result.ok(stockService.restore(req));
     }
 }

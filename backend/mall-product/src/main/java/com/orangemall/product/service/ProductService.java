@@ -272,12 +272,17 @@ public class ProductService {
         cache.delayDoubleDelete(id);
     }
 
-    /** 先写 DB（含冗余 min_price）→ 提交后 DEL 缓存 → 500ms 后再 DEL */
+    /**
+     * 先写 DB（含冗余 min_price）→ 提交后 DEL 缓存 → 500ms 后再 DEL。
+     * {@code @GlobalLock}：sku 行也被下单全局事务（AT 扣库存）修改，后台改价 / 改库存需等待全局锁，避免 AT 回滚时脏写（同 StockService.restore）。
+     */
+    @io.seata.spring.annotation.GlobalLock
     @Transactional(rollbackFor = Exception.class)
     public void updateSku(String idStr, Integer price, Integer stock) {
         Long id = parseId(idStr);
         Sku k = id == null ? null : skuMapper.selectById(id);
         if (k == null) throw BizException.of(2001, "SKU 不存在");
+        skuMapper.lockById(id); // 先等全局锁再拿行锁（见 SkuMapper#lockById）
         if ((price != null && price <= 0) || (stock != null && stock < 0)) throw BizException.of(400, "请求参数错误");
         Sku u = new Sku();
         u.setId(id);
