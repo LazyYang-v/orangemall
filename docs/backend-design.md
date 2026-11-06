@@ -59,6 +59,11 @@ mall-gateway :18080（Spring Cloud Gateway）
   `order.close.exchange` → `order.close.queue` 监听关闭：CAS 校验 PENDING → 库存回滚（仅在场商品，按订单幂等；同步重试 3 次，
   仍失败则进 Redis 延迟集合 `order:restore:retry`，后台按 5/15/30/60s 重试，耗尽才 ALERT）→
   券释放 → 积分回退 → ops 日志 + WebSocket。
+- **库存对账**（Phase 6，`StockReconcileService` + `StockReconcileJob`）：以 `stock_ledger` 为准，每 60s 核对一个窗口
+  （检查点 `order:stock-reconcile:since`，每轮 ≤ 30min，右端 = now − 5min，避开在途下单与关单回补后台重试；首轮只落检查点）。
+  ① 窗口内关闭 / 取消的普通单有 DEDUCT 缺 RESTORE → 按缺的 SKU 自动回补（按订单幂等），失败转 `order:restore:retry`；
+  ② 普通单没有 DEDUCT（未占库存）→ ALERT；③ DEDUCT 找不到订单（分表 + 归档都查不到，库存被占）→ ALERT，不自动处理。
+  手动补跑：`POST /admin/orders/stock-reconcile?hours=24&settleSec=300`（不动检查点）。
 - **物流模拟**：发货后定时器 12s/步推进（揽收→运输→派送→签收），每步 ops.log + WebSocket
   `LOGISTICS_UPDATE` 推送（快递鸟真实订阅的替代实现，见 §4）。
 - **归档**：每天 03:30（Asia/Shanghai）归档 90 天前订单到 `_archive` 表。
@@ -89,6 +94,9 @@ mall-gateway :18080（Spring Cloud Gateway）
   验签失败 6003 / 幂等（已成功支付重复回调 `idempotent:true`）/ 金额不符 6004 / 关闭订单→退款分支。
 - 成功回调 CAS `UPDATE payments SET status='TRADE_SUCCESS' WHERE status='PENDING'`（防并发）→ 发
   MQ `pay.exchange → order.pay.success.queue`（Jackson2Json）→ order 侧标记 PAID + ops + WebSocket。
+- **退款收尾可补偿**（Phase 6）：退款回调 CAS 售后单 → DONE 后的收尾（回补库存，换货除外 → 订单 REFUND_APPLYING → REFUNDED
+  → CAS `refund_order.settled_at`）失败不再抛给渠道，`settled_at` 留空；`PayJobs.settleDoneRefunds` 每 60s 重放 DONE 超过 30s
+  且未收尾的单（两步都幂等），卡住超过 10min 每单 ALERT 一次。
 
 ### 3.4 user / product / marketing / cart
 - **user**：注册送 200 积分与新人券；`/auth/sms` 60s 同号限频（验证码 mock 值 123456）；

@@ -137,6 +137,18 @@
         WHERE status = 'PENDING_PAYMENT' AND pay_deadline &lt; #{before} ORDER BY pay_deadline LIMIT #{limit}
     </select>
 
+    <select id="closedNormalBetween" resultType="long">
+        SELECT id FROM t_order_${s}
+        WHERE source = 'NORMAL' AND status IN ('CLOSED', 'CANCELLED') AND closed_at &gt;= #{from} AND closed_at &lt; #{to}
+        ORDER BY closed_at LIMIT #{limit}
+    </select>
+
+    <select id="createdNormalBetween" resultType="long">
+        SELECT id FROM t_order_${s}
+        WHERE source = 'NORMAL' AND created_at &gt;= #{from} AND created_at &lt; #{to}
+        ORDER BY created_at LIMIT #{limit}
+    </select>
+
     <select id="shippedInTransit" resultType="com.orangemall.order.domain.OrderRow">
         SELECT <include refid="orderCols"/>, '${s}' AS src FROM t_order_${s}
         WHERE status = 'SHIPPED' AND logistics_json IS NOT NULL ORDER BY shipped_at LIMIT #{limit}

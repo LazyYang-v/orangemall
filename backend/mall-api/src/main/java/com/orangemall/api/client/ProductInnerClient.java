@@ -1,11 +1,14 @@
 package com.orangemall.api.client;
 
+import com.orangemall.api.dto.LedgerEntry;
 import com.orangemall.api.dto.SkuInfo;
 import com.orangemall.api.dto.StockOpReq;
 import com.orangemall.common.Result;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
@@ -28,4 +31,12 @@ public interface ProductInnerClient {
      */
     @PostMapping("/stock/restore")
     Result<Integer> restore(@RequestBody StockOpReq req);
+
+    /** 库存对账：一批订单（≤ 500）的全部流水 */
+    @PostMapping("/stock/ledger/by-orders")
+    Result<List<LedgerEntry>> ledgerByOrders(@RequestBody List<Long> orderIds);
+
+    /** 库存对账：[from, to)（epoch 毫秒）内有 DEDUCT 流水的订单号，按订单号升序最多 limit 个 */
+    @GetMapping("/stock/ledger/deducted")
+    Result<List<Long>> deducted(@RequestParam("from") long from, @RequestParam("to") long to, @RequestParam("limit") int limit);
 }

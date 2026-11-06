@@ -15,7 +15,7 @@ x-svc: &svc
     MYSQL_HOST: mysql
     REDIS_HOST: redis
     NACOS_ADDR: nacos:8848
-    # TC 地址列表（分号分隔）。HA（Phase 5）：.env 里设 SEATA_ADDR=seata:8091;seata-2:8091 并带 --profile ha 启动第二个 TC
+    # TC 地址列表（分号分隔，file 注册）。HA 用 docker-compose.ha.yml：改为从 Nacos 发现 TC，此值不再使用
     SEATA_ADDR: ${SEATA_ADDR:-seata:8091}
     RABBIT_HOST: rabbitmq
     KAFKA_ADDR: kafka:9092
@@ -149,8 +149,9 @@ services:
       retries: 24
 
   # TC 高可用（Phase 5，可选）：第二个 TC 与 seata 共用 MySQL seata 库（global/branch/lock_table + distributed_lock），
-  # 任一 TC 都能接手对方发起的全局事务的提交 / 回滚 / 重试；客户端按 SEATA_ADDR 连全部 TC，挂掉的一台由客户端摘除。
-  # 启用：.env 设 SEATA_ADDR=seata:8091;seata-2:8091，再 docker compose --profile app --profile ha up -d
+  # 任一 TC 都能接手对方发起的全局事务的提交 / 回滚 / 重试。
+  # 启用：docker compose -f docker-compose.yml -f docker-compose.ha.yml --profile app --profile ha up -d（Phase 6：TC 注册到 Nacos，
+  # 优雅停机零失败；见该文件头注释）。Phase 5 的 file 注册方式（SEATA_ADDR=seata:8091;seata-2:8091 + --profile ha）仍可用。
   # 不映射宿主机端口（客户端都在 compose 网络内）；约 330MB 内存，默认不启动。
   seata-2:
     image: orange-mall-seata:2.0.0-mysql8

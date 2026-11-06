@@ -63,6 +63,11 @@ WAIT_APPROVAL ─ 审批通过(APPROVE) → APPROVED ─ 渠道受理(REFUNDING)
 ## 4. 联动与一致性
 
 - 退款 DONE 时：`sku` `restore`（若 type RETURN/REFUND）+ `refund_order` 流水留档 + `payment.refunded_amount` 累加 + ops 日志 + WS 推送。
+- **收尾可补偿（Phase 6）**：上面的回补库存与订单 REFUNDED 在售后单 DONE 落库之后执行，原来任一步失败都会抛给渠道回调，
+  而重放回调会被「已 DONE」幂等吞掉，于是订单永远停在 REFUND_APPLYING、库存不回补。现在：
+  - `refund_order.settled_at`（pay V4）= 收尾完成时间；V4 把历史 DONE 单回填为 `done_at`，避免对无流水的老订单重复回补。
+  - 回调里收尾失败只记 `[完成延后]`，回调照常确认；`PayJobs.settleDoneRefunds` 每 60s 重放 DONE ≥ 30s 且 `settled_at` 为空的单。
+  - 收尾两步都幂等：商品侧回补按 `stock_ledger` 每单只补一次；订单侧已是 REFUNDED 视为成功。超过 10min 仍未收尾，每单 ALERT 一次。
 - 支付↔订单对账 job（`ReconcileJob`）扩一条：处于 REFUNDING 超过 24h 的售后单告警。
 - 渠道模拟：`/payments/{no}/sandbox-pay?refund=true` 生成合法退款签名，E2E 可完整演示。
 
