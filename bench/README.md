@@ -22,7 +22,7 @@ bench/
 │   ├── consumer-down.sh    消费者宕机 → 滞留告警（不重置）→ 恢复 → 恢复告警（~5min）
 │   ├── order-down.sh       建单服务宕机 → 重试耗尽 → 补偿（库存回补/成交删除/FAILED）+ EXHAUSTED 死信（~1.5min）
 │   ├── seata-restart.sh    普通下单压测中重启 Seata TC（db 模式）→ 在途事务收敛、库存 = 订单、无 500（~1.5min）
-│   └── seata-ha.sh         两个 TC 之一 docker kill（需 HA 部署）→ +20s 起零失败、另一 TC 收敛、关单回补无遗漏（~2min）
+│   └── seata-ha.sh         两个 TC 之一 kill / stop（MODE，需 HA 部署）→ +20s 起零失败、另一 TC 收敛、关单回补无遗漏（~2min）
 └── results/                基线报告（YYYY-MM-DD.md）与原始输出 raw/（最新：[2026-11-06.md](results/2026-11-06.md)）
 ```
 
@@ -56,8 +56,9 @@ bench/drills/seata-restart.sh                     # 默认取库存最多的在�
 
 # 4. 普通下单热点 SKU / TC 高可用（Phase 5）
 TAG=after bench/hot-sku.sh                        # 原始数据 results/raw/hot-sku-$TAG.txt
-(cd backend/deploy && SEATA_ADDR='seata:8091;seata-2:8091' docker compose --profile app --profile ha up -d --wait)
-SEATA_ADDR='seata:8091;seata-2:8091' TAG=run1 bench/drills/seata-ha.sh   # TC=seata-2 可改杀第二个
+(cd backend/deploy && docker compose -f docker-compose.yml -f docker-compose.ha.yml --profile app --profile ha up -d --wait)
+TAG=run1 bench/drills/seata-ha.sh                 # 进程崩溃；TC=seata-2 可改杀第二个
+MODE=stop TAG=run2 bench/drills/seata-ha.sh       # 优雅停机（滚动重启）：Nacos 注册下应零失败（Phase 6）
 (cd backend/deploy && docker compose --profile app up -d --wait && docker compose stop seata-2)   # 回到默认单 TC
 ```
 

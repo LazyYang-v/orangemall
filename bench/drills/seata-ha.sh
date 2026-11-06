@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Phase 5 演练 F「TC 高可用：两个 TC 之一宕机」：前提是以 HA 方式部署
-#   （.env 或 shell 里 SEATA_ADDR=seata:8091;seata-2:8091，docker compose --profile app --profile ha up -d）。
+# Phase 5 演练 F「TC 高可用：两个 TC 之一宕机」：前提是以 HA 方式部署（Phase 6 起推荐 Nacos 注册）：
+#   docker compose -f docker-compose.yml -f docker-compose.ha.yml --profile app --profile ha up -d --wait
+#   （Phase 5 的 file 注册：shell 里 SEATA_ADDR='seata:8091;seata-2:8091'，不带 -f docker-compose.ha.yml）
 # 20 个压测用户持续普通下单（order-submit 全局事务），第 KILL_AT 秒 docker kill 掉一个 TC（默认 seata，模拟进程崩溃），
 # DOWN 秒后再拉起。验证：
 # 同时（CANCEL_DURING=1，默认开）后台每秒取消刚下的压测订单：关单回补与在途 / 孤儿下单事务争同一 SKU 行，
@@ -9,10 +10,10 @@
 #   ② 被杀 TC 上的在途全局事务由另一个 TC 接手收敛（共用 seata 库）：TC 表清空、无回滚失败的会话、undo_log 回到基线
 #   ③ 数据一致：库存减少 = 订单数 − RESTORE 流水，DEDUCT 流水 = 订单数；关单回补后台重试队列清空，无「关单补偿失败」告警
 # 结束时取消全部演练订单，库存回到原值。用法：bench/drills/seata-ha.sh [skuId]
-#   环境变量 TC（seata|seata-2）、KILL_AT、DOWN、DURATION、RECOVER_S、CANCEL_DURING、TAG（原始数据 results/raw/seata-ha-$TAG.txt）
+#   环境变量 MODE（kill = 进程崩溃，默认；stop = SIGTERM 优雅停机，模拟滚动重启）、TC（seata|seata-2）、KILL_AT、DOWN、DURATION、RECOVER_S、CANCEL_DURING、TAG（原始数据 results/raw/seata-ha-$TAG.txt）
 source "$(dirname "$0")/common.sh"
 SKU=${1:-$(sql "SELECT s.id FROM mall_product.sku s JOIN mall_product.spu p ON p.id=s.spu_id WHERE p.status='ON_SALE' ORDER BY s.stock DESC LIMIT 1")}
-N=${N:-20}; DURATION=${DURATION:-30}; KILL_AT=${KILL_AT:-8}; DOWN=${DOWN:-12}; TC=${TC:-seata}; RECOVER_S=${RECOVER_S:-20}; CANCEL_DURING=${CANCEL_DURING:-1}
+N=${N:-20}; DURATION=${DURATION:-30}; KILL_AT=${KILL_AT:-8}; DOWN=${DOWN:-12}; TC=${TC:-seata}; RECOVER_S=${RECOVER_S:-20}; MODE=${MODE:-kill}; CANCEL_DURING=${CANCEL_DURING:-1}
 WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
 stock() { sql "SELECT stock FROM mall_product.sku WHERE id=$SKU"; }
 ledger() { sql "SELECT COUNT(*) FROM mall_product.stock_ledger WHERE sku_id=$SKU AND op='$1' AND created_at >= '$T0'"; }
@@ -24,13 +25,14 @@ pending_since() {
 health() { docker inspect -f '{{.State.Health.Status}}' "orange-mall-$1-1" 2>/dev/null || echo absent; }
 
 ADDR=$(docker exec orange-mall-mall-order-1 printenv SEATA_ADDR)
-case "$ADDR" in *seata-2*) ;; *) echo "业务服务 SEATA_ADDR=${ADDR}，未以 HA 方式部署（见脚本头注释）"; exit 1 ;; esac
+REG=$(docker exec orange-mall-mall-order-1 printenv SEATA_REGISTRY_TYPE || echo file)
+case "$REG/$ADDR" in nacos/*|*seata-2*) ;; *) echo "业务服务 SEATA_ADDR=${ADDR}、注册 ${REG}，未以 HA 方式部署（见脚本头注释）"; exit 1 ;; esac
 for t in seata seata-2; do [ "$(health $t)" = healthy ] || { echo "TC $t 状态 $(health $t)，需两个 TC 都 healthy"; exit 1; }; done
 [ "$(seata_rows)" = 0 ] || { echo "TC 表非空（$(seata_rows) 行），先等待在途事务结束再演练"; exit 1; }
 
 S0=$(stock); U0=$(undo_rows); T0=$(sql "SELECT NOW(3)"); L0=$(date +%s)
 [ "$(restore_backlog)" = 0 ] || { echo "关单回补后台重试队列非空（$(restore_backlog) 单），先等它清空"; exit 1; }
-echo "SKU $SKU 库存 ${S0}，undo_log ${U0}，SEATA_ADDR=${ADDR}；${N} 用户 × ${DURATION}s，第 ${KILL_AT}s kill ${TC}，${DOWN}s 后拉起"
+echo "SKU $SKU 库存 ${S0}，undo_log ${U0}，TC 发现 ${REG}（${ADDR}）；${N} 用户 × ${DURATION}s，第 ${KILL_AT}s ${MODE} ${TC}，${DOWN}s 后拉起"
 for i in $(seq 0 $((N - 1))); do submit_loop "$i" "$SKU" "$DURATION" "$WORK/r$i" & done
 if [ "$CANCEL_DURING" = 1 ]; then
   touch "$WORK/running"
@@ -38,10 +40,10 @@ if [ "$CANCEL_DURING" = 1 ]; then
   CANCELLER=$!
 fi
 sleep "$KILL_AT"
-echo "1) kill ${TC}（在途全局事务 $(sql 'SELECT COUNT(*) FROM seata.global_table')）"
+echo "1) ${MODE} ${TC}（在途全局事务 $(sql 'SELECT COUNT(*) FROM seata.global_table')）"
 KMS=$(python3 -c 'import time;print(int(time.time()*1000))')
-docker kill "orange-mall-${TC}-1" >/dev/null
-sleep "$DOWN"
+case "$MODE" in stop) docker stop -t 15 "orange-mall-${TC}-1" >/dev/null & STOPPER=$! ;; *) docker kill "orange-mall-${TC}-1" >/dev/null ;; esac
+sleep "$DOWN"; if [ -n "${STOPPER:-}" ]; then wait "$STOPPER"; fi
 docker start "orange-mall-${TC}-1" >/dev/null
 for _ in $(seq 1 40); do [ "$(health "$TC")" = healthy ] && break; sleep 2; done
 echo "   ${TC} 已恢复（$(health "$TC")）"
@@ -62,7 +64,7 @@ E500=$(cut -d' ' -f1 "$WORK"/r* | grep -c '^submit:500$' || true)
 # 按「相对 kill 时刻」每 2 秒一档的成功 / 失败分布，原始数据留档 results/raw/seata-ha-$TAG.txt
 RAW="$BENCH/results/raw/seata-ha-${TAG:-run}.txt"; mkdir -p "$(dirname "$RAW")"
 cat "$WORK"/r* | sort -k3 -n > "$RAW"
-echo "   相对 kill 时刻（s）：成功/失败"
+echo "   相对 ${MODE} 时刻（s）：成功/失败"
 python3 - "$RAW" "$KMS" <<'PY' | sed 's/^/     /'
 import sys
 from collections import defaultdict
@@ -87,7 +89,7 @@ RF=$(sql "SELECT COUNT(*) FROM seata.global_table WHERE status IN (12, 14)")
 echo "   TC 表剩余 ${R1} 行（回滚失败 ${RF}），待处理 undo_log ${U1}（基线 ${U0}），库存 $S0 → ${S1}，新订单 ${NO}，流水 DEDUCT ${D} / RESTORE ${RS}"
 
 ok=1
-[ "$LATE" = 0 ] || { echo "  ✗ kill 后 ${RECOVER_S}s 起仍有 ${LATE} 次失败提交（未在预期时间内恢复）"; ok=0; }
+[ "$LATE" = 0 ] || { echo "  ✗ ${MODE} 后 ${RECOVER_S}s 起仍有 ${LATE} 次失败提交（未在预期时间内恢复）"; ok=0; }
 [ "$RF" = 0 ] || { echo "  ✗ ${RF} 个全局事务回滚失败（dirty undo？）"; ok=0; }
 [ "$E500" = 0 ] || { echo "  ✗ 出现 ${E500} 次 500（应为可重试的 503）"; ok=0; }
 [ "$R1" = 0 ] || { echo "  ✗ TC 表未清空（悬挂事务 ${R1} 行）"; ok=0; }
@@ -102,4 +104,4 @@ sleep 3; wait_restore_drain 150 || true; echo "   库存 $(stock)（演练前 ${
 [ "$(stock)" = "$S0" ] || { echo "  ✗ 取消后库存未回到演练前"; ok=0; }
 ALERTS=$(order_log_count '关单补偿失败' "$L0")
 [ "$ALERTS" = 0 ] || { echo "  ✗ ${ALERTS} 条关单补偿失败告警（需人工按 stock_ledger 校准）"; ok=0; }
-[ $ok = 1 ] && echo "  ✓ TC 高可用：kill ${TC} ${DOWN}s，总成功率 ${PCT}%、+${RECOVER_S}s 起零失败、无 500；在途事务由另一 TC 收敛，库存 / 流水 / 订单一致" || exit 1
+[ $ok = 1 ] && echo "  ✓ TC 高可用：${MODE} ${TC} ${DOWN}s，总成功率 ${PCT}%、+${RECOVER_S}s 起零失败、无 500；在途事务由另一 TC 收敛，库存 / 流水 / 订单一致" || exit 1

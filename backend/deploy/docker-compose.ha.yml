@@ -1,0 +1,41 @@
+# TC 高可用叠加文件（Phase 6）：第二个 TC + TC 注册到 Nacos、客户端从 Nacos 发现 TC。
+#   docker compose -f docker-compose.yml -f docker-compose.ha.yml --profile app --profile ha up -d --wait
+#   常驻 HA：.env 里设 COMPOSE_FILE=docker-compose.yml:docker-compose.ha.yml 与 COMPOSE_PROFILES=app,ha（见 .env.example）
+#
+# 为什么要 Nacos（演练数据见 docs/PHASE6-REPORT.md §3）：file 注册下客户端的 TC 列表是写死的 SEATA_ADDR，
+# 停掉的 TC 在列表里一直存在，随机负载均衡仍会选中它：停机后请求卡在 10s 建连超时；重启后、端口监听前又被 RST 拒绝。
+# 改成 Nacos 后，TC 优雅停机（SIGTERM，滚动重启）时先注销、重启后监听端口才注册，客户端只连在册的 TC：
+# 演练 stop 一个 TC 12s，成功率 67% → 100%、失败 54 → 0。进程崩溃（kill）时 Nacos 感知不到连接断开，要等 TC 重启
+# 才刷新列表，恢复时间与 file 注册相同（约 +14s），仍受 Seata 2.0 客户端写死的连接超时限制。
+x-seata-nacos: &seata-nacos
+  SEATA_REGISTRY_TYPE: nacos
+  SEATA_REGISTRY_NACOS_SERVERADDR: nacos:8848
+  SEATA_REGISTRY_NACOS_APPLICATION: seata-server
+  SEATA_REGISTRY_NACOS_GROUP: SEATA_GROUP
+  # 与客户端 vgroup-mapping（mall_tx_group: default）对应
+  SEATA_REGISTRY_NACOS_CLUSTER: default
+
+# 客户端：Spring 环境变量覆盖 application.yml 的 seata.registry.type=file；grouplist（SEATA_ADDR）在 nacos 注册下不再使用
+x-client: &client
+  environment:
+    <<: *seata-nacos
+    SEATA_ADDR: seata:8091;seata-2:8091
+
+services:
+  seata:
+    environment:
+      <<: *seata-nacos
+      # TC 写进 XID 的地址；Nacos 里登记的是容器 IP。默认的 127.0.0.1 只适用于宿主机直连
+      SEATA_IP: seata
+    depends_on:
+      nacos: { condition: service_healthy }
+  seata-2:
+    environment:
+      <<: *seata-nacos
+      SEATA_IP: seata-2
+    depends_on:
+      nacos: { condition: service_healthy }
+  mall-order: *client
+  mall-product: *client
+  mall-user: *client
+  mall-marketing: *client

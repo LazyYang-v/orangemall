@@ -81,6 +81,12 @@ public interface OrderMapper {
 
     List<OrderRow> overduePending(@Param("s") String s, @Param("before") Instant before, @Param("limit") int limit);
 
+    /** 库存对账：[from, to) 内关闭 / 取消的普通单（idx_closed_at） */
+    List<Long> closedNormalBetween(@Param("s") String s, @Param("from") Instant from, @Param("to") Instant to, @Param("limit") int limit);
+
+    /** 库存对账：[from, to) 内创建的普通单（idx_created_at） */
+    List<Long> createdNormalBetween(@Param("s") String s, @Param("from") Instant from, @Param("to") Instant to, @Param("limit") int limit);
+
     List<OrderRow> shippedInTransit(@Param("s") String s, @Param("limit") int limit);
 
     List<Long> archivableIds(@Param("s") String s, @Param("before") Instant before, @Param("limit") int limit);

@@ -56,6 +56,8 @@ class OrderCloseTest {
         when(redis.opsForHash()).thenReturn(h);
         when(z.add(eq(OrderService.RESTORE_RETRY), anyString(), anyDouble()))
                 .thenAnswer(inv -> retry.put(inv.getArgument(1), (long) (double) inv.getArgument(2)) == null);
+        when(z.addIfAbsent(eq(OrderService.RESTORE_RETRY), anyString(), anyDouble()))
+                .thenAnswer(inv -> retry.putIfAbsent(inv.getArgument(1), (long) (double) inv.getArgument(2)) == null);
         when(z.rangeByScore(eq(OrderService.RESTORE_RETRY), anyDouble(), anyDouble(), anyLong(), anyLong())).thenAnswer(inv -> {
             double max = inv.getArgument(2);
             return retry.entrySet().stream().filter(e -> e.getValue() <= max).map(java.util.Map.Entry::getKey)

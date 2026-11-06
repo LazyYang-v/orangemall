@@ -195,7 +195,10 @@ public class RefundService {
 
     private static final String RF = "RF";
 
-    /** 渠道回调成功执行（幂等键 = refund id）：DONE → 回补库存 → 订单 REFUNDED → WS 推送 */
+    /**
+     * 渠道回调成功执行（幂等键 = refund id）：CAS → DONE → {@link #settle}（回补库存 → 订单 REFUNDED → WS 推送）。
+     * settle 是跨服务调用，可能失败；DONE 已落库，回调重放会走「幂等忽略」，所以失败时不抛给渠道，留给 PayJobs 定时重放 settle。
+     */
     void applyRefundSuccess(long refundId, String paymentNo, int amount) {
         RefundOrder r = refunds.selectById(refundId);
         if (r == null) throw new BizException(6102, "售后单不存在");
@@ -215,14 +218,39 @@ public class RefundService {
                     .set(Payment::getRefundNo, String.valueOf(refundId))
                     .set(Payment::getUpdatedAt, Instant.now()));
         }
+        r.setStatus("DONE");
+        try {
+            settle(r);
+        } catch (Exception e) {
+            ops.log("REFUND", "[完成延后] 售后单 " + refundId + " 订单 " + r.getOrderId() + " 已退款，回补库存 / 订单状态未完成，转后台补偿：" + e.getMessage());
+        }
+    }
+
+    /**
+     * DONE 之后的收尾（可重放）：回补库存（按订单幂等，stock_ledger RESTORE 唯一键）→ 订单 REFUND_APPLYING → REFUNDED
+     * （订单已是 REFUNDED 视为已完成）→ 记 settled_at → 推送。任何一步失败抛出，settled_at 保持为空，下次重放从头再来。
+     */
+    public void settle(RefundOrder r) {
         if (!"EXCHANGE".equals(r.getType())) {
             List<StockItem> items = orders.items(r.getOrderId()).unwrap();
-            // 按订单幂等（stock_ledger RESTORE 唯一键）：回调重放 / 重试不会重复回补
             product.restore(new StockOpReq(r.getOrderId(), items)).unwrap();
         }
         orders.refundState(r.getOrderId(), new RefundStateReq("REFUND_APPLYING", "REFUNDED")).unwrap();
-        ops.log("REFUND", "[完成] 售后单 " + refundId + " 订单 " + r.getOrderId() + " → 已退款，库存已回补，金额 ¥" + cen(amount));
-        push(r, "REFUND_UPDATE", "退款完成：¥" + cen(amount) + " 已原路退回");
+        int rows = refunds.update(null, new LambdaUpdateWrapper<RefundOrder>()
+                .eq(RefundOrder::getId, r.getId()).eq(RefundOrder::getStatus, "DONE").isNull(RefundOrder::getSettledAt)
+                .set(RefundOrder::getSettledAt, Instant.now()));
+        if (rows == 0) return; // 并发重放已完成
+        ops.log("REFUND", "[完成] 售后单 " + r.getId() + " 订单 " + r.getOrderId() + " → 已退款，"
+                + ("EXCHANGE".equals(r.getType()) ? "换货不回补库存" : "库存已回补") + "，金额 ¥" + cen(r.getAmount()));
+        push(r, "REFUND_UPDATE", "退款完成：¥" + cen(r.getAmount()) + " 已原路退回");
+    }
+
+    /** 待补偿：DONE 超过 olderThan 仍未 settle 的售后单（PayJobs 定时重放） */
+    public List<RefundOrder> unsettled(Duration olderThan, int limit) {
+        return refunds.selectList(new LambdaQueryWrapper<RefundOrder>()
+                .eq(RefundOrder::getStatus, "DONE").isNull(RefundOrder::getSettledAt)
+                .lt(RefundOrder::getDoneAt, Instant.now().minus(olderThan))
+                .orderByAsc(RefundOrder::getDoneAt).last("LIMIT " + Math.max(1, limit)));
     }
 
     /** 退款回调分支（由 PayService.notify 委托；验签失败按渠道规范拒绝） */

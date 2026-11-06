@@ -447,11 +447,16 @@ public class OrderService {
             }
         }
         String reason = last == null ? "" : last.getMessage();
+        deferRestore(orderId, "库存回补同步重试失败", reason);
+    }
+
+    /** 登记到关单回补后台重试（已在队列里则不重复登记、不重置计数）；Redis 也不可用时直接 ALERT */
+    public void deferRestore(long orderId, String why, String reason) {
         try {
-            redis.opsForZSet().add(RESTORE_RETRY, String.valueOf(orderId), System.currentTimeMillis() + restoreRetryDelayMs[0]);
-            ops.log("ORDER", "[关单补偿延后] 订单 " + orderId + " 库存回补同步重试失败，转后台重试：" + reason);
+            redis.opsForZSet().addIfAbsent(RESTORE_RETRY, String.valueOf(orderId), System.currentTimeMillis() + restoreRetryDelayMs[0]);
+            ops.log("ORDER", "[关单补偿延后] 订单 " + orderId + " " + why + "，转后台重试：" + reason);
         } catch (Exception e) {
-            ops.log("ALERT", "[关单补偿失败] 订单 " + orderId + " 库存回补重试耗尽且无法登记后台重试，需人工按 stock_ledger 核对：" + reason);
+            ops.log("ALERT", "[关单补偿失败] 订单 " + orderId + " " + why + "且无法登记后台重试，需人工按 stock_ledger 核对：" + reason);
         }
     }
 
@@ -594,6 +599,8 @@ public class OrderService {
     public boolean refundTransition(long id, String from, String to) {
         OrderRow o = findAny(id);
         if (o == null) throw new BizException(5004, "订单不存在");
+        // 退款完成可能被重放（mall-pay 的 settle 补偿）：已是 REFUNDED 视为成功、不再流转
+        if (OrderStatus.REFUNDED.equals(to) && OrderStatus.REFUNDED.equals(o.getStatus())) return false;
         boolean valid = switch (to) {
             case OrderStatus.REFUND_APPLYING -> List.of(OrderStatus.PAID, OrderStatus.SHIPPED, OrderStatus.COMPLETED).contains(o.getStatus());
             case OrderStatus.REFUNDED -> OrderStatus.REFUND_APPLYING.equals(o.getStatus());

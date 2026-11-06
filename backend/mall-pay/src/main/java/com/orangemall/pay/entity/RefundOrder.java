@@ -30,6 +30,8 @@ public class RefundOrder {
     private Instant auditAt;
     private String refundTradeNo;
     private Instant doneAt;
+    /** DONE 后的回补库存 + 订单 REFUNDED 都完成的时间；空 = 待补偿（V4） */
+    private Instant settledAt;
     private Instant createdAt;
     private Instant updatedAt;
 }
