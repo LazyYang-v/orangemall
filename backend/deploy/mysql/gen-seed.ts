@@ -2,7 +2,10 @@
  * 由前端 Mock 种子（frontend/src/mock/seed.ts + db.ts 中的演示数据）生成 MySQL 初始化数据，
  * 保证真实后端与 Mock 的商品、券、积分商品、演示账号完全一致。
  *
- *   node deploy/mysql/gen-seed.ts > deploy/mysql/init/02-seed.sql
+ * Phase 4 起种子是各服务的 Flyway 迁移 db/migration/V2__seed.sql（已冻结：盐值/时间每次生成都不同，
+ * 改动已发布的 V2 会让 Flyway 校验和失败）。只在全新搭建时重新生成；存量环境要改种子请新增 V<n> 迁移。
+ *   node deploy/mysql/gen-seed.ts            # 输出到 stdout（按 USE mall_xxx; 分段）
+ *   node deploy/mysql/gen-seed.ts --write    # 直接写入 backend/mall-<svc>/src/main/resources/db/migration/V2__seed.sql
  */
 import { createHash, randomBytes } from 'node:crypto'
 import {
@@ -125,4 +128,23 @@ insert('payment', ['payment_no', 'order_id', 'user_id', 'channel', 'amount', 'st
     return [q(`P${h.id}`), h.id, U1, q('ALIPAY'), q(goods), q('SUCCESS'), q(`https://qr.alipay-sandbox.com/P${h.id}`), ago(h.agoSec - 1800), '1', ago(h.agoSec - 60), ago(h.agoSec)]
   }))
 
-console.log(out.join('\n\n'))
+if (process.argv.includes('--write')) {
+  const { writeFileSync } = await import('node:fs')
+  const { fileURLToPath } = await import('node:url')
+  const backend = fileURLToPath(new URL('../../', import.meta.url))
+  // out 以 'USE mall_xxx;' 分段；每段写到对应服务的 V2__seed.sql（Flyway 连接时已选库，去掉 USE）
+  let db = '', buf: string[] = []
+  const flush = () => {
+    if (!db) return
+    const svc = db.replace('mall_', 'mall-')
+    writeFileSync(`${backend}${svc}/src/main/resources/db/migration/V2__seed.sql`,
+      `-- ${db} 演示种子（由 deploy/mysql/gen-seed.ts 生成；Flyway 冻结后勿重新生成覆盖）\nSET NAMES utf8mb4;\n\n${buf.join('\n\n')}\n`)
+  }
+  for (const s of out) {
+    const m = /^USE (mall_\w+);$/.exec(s)
+    if (m) { flush(); db = m[1]; buf = [] } else if (db) buf.push(s)
+  }
+  flush()
+} else {
+  console.log(out.join('\n\n'))
+}

@@ -12,7 +12,7 @@
 | 用户管理 / RBAC 雏形 | `/admin/users` 列表 + 详情 + 封禁 | mall-user `GET /admin/users`、`/admin/users/{id}`；网关路由；后台菜单新增「用户」分组；封禁复用风控黑名单 | Playwright 02：列表、详情/封禁按钮可见 |
 | OM-015 | 后台收货人/手机号检索 | 冗余列 `receiver`/`phone` + 独立索引 `idx_receiver`、`idx_phone`（4 分片 + 归档表）；关键词按形态分流：15+ 位数字 → 主键精确，数字 → 手机号前缀，其它 → 收货人前缀；`% _ !` 转义按字面匹配；seed 回填 | 10 万行基准：新方案 `range/const`，扫描 139 / 1262 / 1 行，1.5 ms / 0.9 ms；旧 `%kw%` 方案 `ALL` 扫描 99 310 行，111.6 ms |
 | OM-023 | 375px 移动端 | 全局 `min-width 1320px → 320px`、`.container` 流式；TopBar/SiteHeader/MainNav/SiteFooter 及 20+ 页面/组件 `≤900px` 规则（详见 `docs/pages-matrix.md`） | `scripts/mobile-audit.mjs` 19 个页面横向溢出全部 0px；人工截图核对首页/详情/购物车/订单详情/个人中心 |
-| Playwright | 冒烟入库 + CI | `frontend/playwright/`（01 浏览 7 例 · 02 交易链路 6 例串行 · 03 移动端 16 例）；`.github/workflows/e2e.yml`（构建后端 → compose 拉栈 → 构建前端 → 跑用例，失败上传报告与服务日志） | 本机关闭重试连续 4 次 29/29 通过；**CI 工作流尚未在 GitHub 上实际运行过**（需推送后验证） |
+| Playwright | 冒烟入库 + CI | `frontend/playwright/`（01 浏览 7 例 · 02 交易链路 6 例串行 · 03 移动端 16 例）；`.github/workflows/e2e.yml`（构建后端 → compose 拉栈 → 构建前端 → 跑用例，失败上传报告与服务日志） | 本机关闭重试连续 4 次 29/29 通过；GitHub Actions 已在 PR #1 上运行通过（随 Phase 1–3 合并 main，`f52d35a`） |
 | 页面矩阵 | `docs/pages-matrix.md` | 全路由的鉴权、375 结果、E2E 覆盖、依赖与适配要点 | — |
 
 错误码：售后独立号段 `61xx`（6101 不可售后 / 6102 不存在 / 6103 已有进行中 / 6104 已受理或流水不匹配），
@@ -38,4 +38,4 @@
 - RBAC 仍是 `USER/ADMIN` 二元角色，用户管理为雏形（无角色分配、无操作审计细分）。
 - 设计 token：沿用 `styles/base.css` 既有颜色/圆角/阴影变量，断点统一为 900px；未扩展间距/字号 token。
 - 退款为全额退款；部分退款、退货物流单号回填未实现。
-- CI 工作流需推送到 GitHub 后首跑确认（runner 内存约 7GB，整栈含 Kafka/Nacos/Seata，可能需要调参）。
+- ~~CI 工作流需推送到 GitHub 后首跑确认~~ → 已在 PR #1 上跑通（ubuntu-latest runner 可拉起整栈）。

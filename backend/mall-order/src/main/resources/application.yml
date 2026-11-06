@@ -8,6 +8,17 @@ spring:
     url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/mall_order?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
     username: root
     password: root
+  # Phase 4：Flyway 迁移。独立连接（不经 Seata 数据源代理）；存量库（由旧 init SQL 建成、无 history 表）
+  # 在 V2（结构+种子）处接管，只执行 V3 起的增量；全新空库从 V1 开始。
+  flyway:
+    enabled: true
+    url: ${spring.datasource.url}
+    user: ${spring.datasource.username}
+    password: ${spring.datasource.password}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 2
+    validate-migration-naming: true
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -73,3 +84,24 @@ logging:
   level:
     root: info
     io.seata: warn
+
+# Phase 4（OM-018 / OM-020）：actuator 走独立管理端口 9105（只在容器网络内可达，网关路由不到 → 不对外暴露）。
+#   /actuator/health/readiness → compose healthcheck；/actuator/prometheus → Prometheus 抓取
+management:
+  server:
+    port: ${MANAGEMENT_PORT:9105}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        "[http.server.requests]": true

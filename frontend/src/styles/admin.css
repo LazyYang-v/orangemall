@@ -23,3 +23,17 @@
 .op:disabled { color: var(--c-text-4); cursor: not-allowed; text-decoration: none; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+
+/* ≤900px（Phase 4）：页面不横滑——宽表格只在卡片内横向滚动，多列网格折成单列（KPI 两列） */
+@media (max-width: 900px) {
+  .adm-page { padding: 12px 12px 32px; }
+  .adm-title { flex-wrap: wrap; gap: 8px; }
+  .adm-title .right { margin-left: 0; flex-wrap: wrap; }
+  .adm-card { padding: 12px; overflow-x: auto; }
+  .adm-card .table { min-width: 560px; }
+  .adm-card .table.inner { min-width: 0; }
+  .adm-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .adm-grid.kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .kpi .v { font-size: 22px; }
+  .adm-toolbar .input, .adm-toolbar select { max-width: 100%; }
+}

@@ -1,0 +1,81 @@
+-- mall_product 基线结构（Phase 4 由 deploy/mysql/init/01-schema.sql 拆出；之后的结构变更只追加 V<n>__*.sql，不改本文件）
+SET NAMES utf8mb4;
+
+-- Seata AT 回滚日志
+CREATE TABLE IF NOT EXISTS undo_log (branch_id BIGINT NOT NULL, xid VARCHAR(128) NOT NULL, context VARCHAR(128) NOT NULL, rollback_info LONGBLOB NOT NULL, log_status INT NOT NULL, log_created DATETIME(6) NOT NULL, log_modified DATETIME(6) NOT NULL, UNIQUE KEY ux_undo_log (xid, branch_id), KEY ix_log_created (log_created)) ENGINE=InnoDB;
+CREATE TABLE category (
+  id INT PRIMARY KEY,
+  parent_id INT NOT NULL DEFAULT 0 COMMENT '邻接表，0 为根',
+  name VARCHAR(40) NOT NULL,
+  icon VARCHAR(20) NULL,
+  sort INT NOT NULL DEFAULT 0,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  KEY idx_parent (parent_id)
+) COMMENT '类目（邻接表）';
+
+CREATE TABLE brand (
+  id INT PRIMARY KEY,
+  name VARCHAR(40) NOT NULL,
+  shop_name VARCHAR(60) NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+) COMMENT '品牌';
+
+CREATE TABLE spu (
+  id BIGINT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  subtitle VARCHAR(200) NOT NULL,
+  category_id INT NOT NULL,
+  brand_id INT NOT NULL,
+  art VARCHAR(20) NOT NULL COMMENT '前端矢量插画类型',
+  tint VARCHAR(10) NOT NULL,
+  image_url VARCHAR(255) NULL,
+  min_price INT NOT NULL COMMENT '分，冗余 = min(sku.price)',
+  max_original_price INT NOT NULL,
+  sales INT NOT NULL DEFAULT 0,
+  rating DECIMAL(3,1) NOT NULL DEFAULT 5.0,
+  tags VARCHAR(255) NOT NULL DEFAULT '[]' COMMENT 'JSON 数组',
+  status VARCHAR(10) NOT NULL DEFAULT 'ON_SALE',
+  spec_groups TEXT NOT NULL COMMENT 'JSON [{name,values}]',
+  detail TEXT NOT NULL COMMENT 'JSON 段落数组',
+  params TEXT NOT NULL COMMENT 'JSON [[k,v]]',
+  is_new TINYINT NOT NULL DEFAULT 0,
+  shop_name VARCHAR(60) NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  KEY idx_category (category_id),
+  KEY idx_brand (brand_id),
+  KEY idx_status_sales (status, sales)
+) COMMENT 'SPU';
+
+CREATE TABLE sku (
+  id BIGINT PRIMARY KEY,
+  spu_id BIGINT NOT NULL,
+  specs VARCHAR(500) NOT NULL COMMENT 'JSON {规格名: 规格值}，保持规格组顺序',
+  price INT NOT NULL,
+  original_price INT NOT NULL,
+  stock INT NOT NULL,
+  sales INT NOT NULL DEFAULT 0,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  KEY idx_spu (spu_id)
+) COMMENT 'SKU（库存扣减：UPDATE ... WHERE stock >= n）';
+
+CREATE TABLE favorite (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  spu_id BIGINT NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_user_spu (user_id, spu_id)
+) COMMENT '收藏';
+
+CREATE TABLE notice (
+  id VARCHAR(16) PRIMARY KEY,
+  title VARCHAR(100) NOT NULL,
+  date VARCHAR(10) NOT NULL,
+  content VARCHAR(500) NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+) COMMENT '公告';

@@ -1,0 +1,28 @@
+# OM-020：抓取网关与 7 个业务服务的 /actuator/prometheus（容器内管理端口 8558，见 docker-compose.yml MANAGEMENT_PORT）
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: orange-mall
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - mall-gateway:8558
+          - mall-user:8558
+          - mall-product:8558
+          - mall-cart:8558
+          - mall-marketing:8558
+          - mall-order:8558
+          - mall-pay:8558
+          - mall-seckill:8558
+    relabel_configs:
+      # instance 用服务名（去掉端口），面板图例更短
+      - source_labels: [__address__]
+        regex: '([^:]+):\d+'
+        target_label: instance
+        replacement: '$1'
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']

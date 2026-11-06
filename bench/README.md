@@ -19,7 +19,8 @@ bench/
 │   ├── poison.sh           投毒消息 → DLT 留档 + 告警（~10s）
 │   ├── inflight-leak.sh    在途计数泄漏 → 告警 + 自动重置（~4min）
 │   ├── consumer-down.sh    消费者宕机 → 滞留告警（不重置）→ 恢复 → 恢复告警（~5min）
-│   └── order-down.sh       建单服务宕机 → 重试耗尽 → 补偿（库存回补/成交删除/FAILED）+ EXHAUSTED 死信（~1.5min）
+│   ├── order-down.sh       建单服务宕机 → 重试耗尽 → 补偿（库存回补/成交删除/FAILED）+ EXHAUSTED 死信（~1.5min）
+│   └── seata-restart.sh    普通下单压测中重启 Seata TC（db 模式）→ 在途事务收敛、库存 = 订单、无 500（~1.5min）
 └── results/                基线报告（YYYY-MM-DD.md）与原始输出 raw/（最新：[2026-11-06.md](results/2026-11-06.md)）
 ```
 
@@ -49,6 +50,7 @@ bench/drills/poison.sh
 bench/drills/inflight-leak.sh
 bench/drills/consumer-down.sh
 bench/drills/order-down.sh
+bench/drills/seata-restart.sh                     # 默认取库存最多的在售 SKU；结束时取消演练订单，库存回到原值
 ```
 
 ## 约定与注意
@@ -59,4 +61,6 @@ bench/drills/order-down.sh
 - e2e 是否超卖**只看 `verify.sh`**（DB/Redis 为准）：库存消耗 = `seckill_order` 行数 = 订单数，Redis/DB ≥ 0 且 Redis = DB − 在途，无一人多单。
 - 一轮中途失败后直接重跑是安全的：`prepare.sh` 会先恢复消费者并等上一轮积压消费完，否则清理期间仍有旧消息落单，核对会出现「成交 > 总库存」的假超卖。
 - 秒杀订单超时关单**不回补秒杀库存**（只有普通单回补商品库存），所以 verify 在关单前后结论一致。
+- `seata-restart.sh` 用压测用户 4900~4919（需已有收货地址，`seed-bench-users.sql` 已建）；TC 不可用窗口内的提交应返回 503（可重试），
+  不允许出现 500；`undo_log` 只统计 `log_status=0`，`log_status=1` 是 Seata 防悬挂标记（7 天清理），属预期。
 - 演练依赖 `SECKILL_INFLIGHT_STUCK_SECONDS`（默认 180s）；想更快可在 `.env` 调小后重启 mall-seckill。
