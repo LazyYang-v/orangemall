@@ -41,6 +41,8 @@
         <mybatis-plus.version>3.5.7</mybatis-plus.version>
         <redisson.version>3.30.0</redisson.version>
         <lombok.version>1.18.40</lombok.version>
+        <!-- Boot 3.3.0 托管 1.19.8：Docker Engine 29 起最低 API 1.40，旧版 docker-java 握手被拒；1.21.4 起兼容 -->
+        <testcontainers.version>1.21.4</testcontainers.version>
     </properties>
 
     <dependencyManagement>
@@ -93,6 +95,12 @@
             <artifactId>lombok</artifactId>
             <version>${lombok.version}</version>
             <scope>provided</scope>
+        </dependency>
+        <!-- Phase 4（OM-009）：单测 JUnit 5 + AssertJ；需要中间件的集成测试用 Testcontainers（无 Docker 时自动跳过） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

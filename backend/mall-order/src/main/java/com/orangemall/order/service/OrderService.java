@@ -371,8 +371,16 @@ public class OrderService {
         if (o != null) close(o, reason, status);
     }
 
-    /** 关单（取消 / 超时 / 后台过期）：CAS 关单后回补库存、释放优惠券、退还积分 */
-    public void close(OrderRow o, String reason, String status) {        int rows = orderMapper.closeIfPending(o.getSrc(), o.getId(), OrderStatus.PENDING_PAYMENT, Instant.now(), reason);
+    /**
+     * 关单（取消 / 超时 / 后台过期）：CAS 关单后回补库存、释放优惠券、退还积分。
+     * CAS（PENDING_PAYMENT → status）是补偿只执行一次的唯一保证：只有把状态真正改走的那一次调用才回补，
+     * MQ 延迟消息、DLQ 重试、超时扫描、用户取消并发或重复到达时其余调用 rows=0 直接返回。
+     * （修复前这里误传 PENDING_PAYMENT，状态从未改变 → 每分钟超时扫描反复回补同一批订单的库存，见 PHASE4-REPORT。）
+     */
+    public void close(OrderRow o, String reason, String status) {
+        if (!OrderStatus.CLOSED.equals(status) && !OrderStatus.CANCELLED.equals(status))
+            throw new IllegalArgumentException("close status must be CLOSED/CANCELLED: " + status);
+        int rows = orderMapper.closeIfPending(o.getSrc(), o.getId(), status, Instant.now(), reason);
         if (rows == 0) return;
         if ("NORMAL".equals(o.getSource())) {
             List<OrderItemRow> items = orderMapper.findItems(o.getSrc(), List.of(o.getId()));

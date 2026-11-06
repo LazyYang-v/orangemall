@@ -174,4 +174,62 @@ header {
   gap: 4px;
   color: var(--c-text-3);
 }
+
+/* ≤900px：侧栏变顶部菜单条（单行横滑，当前项自动可见），面包屑栏紧凑化 */
+@media (max-width: 900px) {
+  .admin {
+    flex-direction: column;
+  }
+  aside {
+    width: auto;
+    height: auto;
+    position: sticky;
+    z-index: 20;
+    overflow: visible;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+  }
+  .brand {
+    margin: 0;
+    padding: 4px 6px;
+    flex: none;
+  }
+  .env,
+  .grp {
+    display: none;
+  }
+  nav {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+    min-width: 0;
+  }
+  nav::-webkit-scrollbar {
+    display: none;
+  }
+  nav a {
+    flex: none;
+    padding: 8px 10px;
+    gap: 6px;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+  }
+  nav a.on {
+    border-bottom-color: var(--c-primary);
+  }
+  header {
+    top: 46px;
+    height: 44px;
+    padding: 0 12px;
+  }
+  .right {
+    gap: 12px;
+  }
+  .me {
+    display: none;
+  }
+}
 </style>

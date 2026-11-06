@@ -7,7 +7,7 @@ import lombok.Data;
 
 import java.time.Instant;
 
-/** 每次回调留痕（审计 + 排查重复回调）。列与 01-schema.sql 一致 */
+/** 每次回调留痕（审计 + 排查重复回调）。列与 db/migration/V1__schema.sql 一致 */
 @Data
 @TableName("pay_notify_log")
 public class PayNotifyLog {

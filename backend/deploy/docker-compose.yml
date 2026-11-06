@@ -1,8 +1,10 @@
 # 橙选商城一键部署
 #   基础设施：docker compose up -d
 #   全部服务：docker compose --profile app up -d --build   （先在 backend/ 下 mvn package）
+#   监控：    docker compose --profile monitor up -d        （Prometheus :19090 / Grafana :13000，仅绑定 127.0.0.1）
 #   访问：http://localhost:8090（Nginx：前端静态资源 + /api 反代网关 + 秒杀限流）
 #         网关直连 http://localhost:18080 （宿主机 8080 已被占用）
+#   启动顺序（OM-018）：infra healthy → 各业务服务 readiness 通过（已注册 Nacos）→ 网关 → Nginx，冷启动不再有 503 窗口
 name: orange-mall
 
 x-svc: &svc
@@ -21,6 +23,15 @@ x-svc: &svc
     PAY_SANDBOX_KEY: ${PAY_SANDBOX_KEY:?请在 backend/deploy/.env 设置 PAY_SANDBOX_KEY（复制 .env.example）}
     INNER_SECRET: ${INNER_SECRET:?请在 backend/deploy/.env 设置 INNER_SECRET（复制 .env.example）}
     JAVA_OPTS: -Xms192m -Xmx320m -XX:MaxMetaspaceSize=160m -Xss512k
+    # actuator 独立管理端口（容器内统一 8558，不映射到宿主机；网关路由不到）
+    MANAGEMENT_PORT: "8558"
+  # OM-018：readiness = Spring 上下文就绪 + 已注册 Nacos；镜像自带 curl
+  healthcheck:
+    test: ["CMD-SHELL", "curl -sf http://localhost:8558/actuator/health/readiness >/dev/null || exit 1"]
+    interval: 5s
+    timeout: 3s
+    start_period: 90s
+    retries: 24
   depends_on: &svc-deps
     mysql: { condition: service_healthy }
     redis: { condition: service_healthy }
@@ -101,30 +112,65 @@ services:
       retries: 40
 
   seata:
-    image: seataio/seata-server:2.0.0
+    build: ./seata
+    image: orange-mall-seata:2.0.0-mysql8
+    # OM-017：store.mode=db —— 全局事务/分支/全局锁落 MySQL seata 库（mysql/init/02-seata.sql），
+    # TC 重启或容器重建后从库里恢复在途事务继续二阶段提交/回滚；file 模式下 sessionStore 在容器层，重建即丢。
     environment:
       SEATA_PORT: 8091
-      STORE_MODE: file
+      STORE_MODE: db
+      SEATA_STORE_MODE: db
+      SEATA_STORE_DB_DATASOURCE: hikari
+      SEATA_STORE_DB_DBTYPE: mysql
+      SEATA_STORE_DB_DRIVERCLASSNAME: com.mysql.cj.jdbc.Driver
+      SEATA_STORE_DB_URL: jdbc:mysql://mysql:3306/seata?rewriteBatchedStatements=true&useSSL=false&allowPublicKeyRetrieval=true
+      SEATA_STORE_DB_USER: root
+      SEATA_STORE_DB_PASSWORD: root
+      SEATA_STORE_DB_MINCONN: 5
+      SEATA_STORE_DB_MAXCONN: 30
+      # undo_log 清理：TC 每天通知各 RM 删除 7 天前的回滚日志（Seata 默认值，显式写出便于运维查阅）
+      SEATA_SERVER_UNDO_LOGSAVEDAYS: 7
+      SEATA_SERVER_UNDO_LOGDELETEPERIOD: 86400000
       SEATA_IP: ${SEATA_IP:-127.0.0.1}
       JVM_XMS: 192m
       JVM_XMX: 256m
     ports: ["8091:8091", "7091:7091"]
+    depends_on:
+      mysql: { condition: service_healthy }
+    healthcheck:
+      # 控制台 7091 有响应 = Spring 容器已起；TC 端口 8091 在监听（/proc/net/tcp 中 1F9B = 8091）
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:7091/ && grep -qi ':1F9B ' /proc/net/tcp /proc/net/tcp6"]
+      interval: 5s
+      timeout: 3s
+      start_period: 30s
+      retries: 24
 
   # ---------------- 微服务 ----------------
   mall-gateway:
     <<: *svc
     build: ../mall-gateway
     ports: ["18080:8080"]
+    # 等业务服务全部 ready 再起网关：负载均衡缓存首拉即拿到完整实例列表
+    depends_on:
+      redis: { condition: service_healthy }
+      nacos: { condition: service_healthy }
+      mall-user: { condition: service_healthy }
+      mall-product: { condition: service_healthy }
+      mall-cart: { condition: service_healthy }
+      mall-marketing: { condition: service_healthy }
+      mall-order: { condition: service_healthy }
+      mall-pay: { condition: service_healthy }
+      mall-seckill: { condition: service_healthy }
 
   mall-user:
     <<: *svc
     build: ../mall-user
-    depends_on: { <<: *svc-deps, seata: { condition: service_started } }
+    depends_on: { <<: *svc-deps, seata: { condition: service_healthy } }
 
   mall-product:
     <<: *svc
     build: ../mall-product
-    depends_on: { <<: *svc-deps, seata: { condition: service_started } }
+    depends_on: { <<: *svc-deps, seata: { condition: service_healthy } }
 
   mall-cart:
     <<: *svc
@@ -133,12 +179,12 @@ services:
   mall-marketing:
     <<: *svc
     build: ../mall-marketing
-    depends_on: { <<: *svc-deps, seata: { condition: service_started } }
+    depends_on: { <<: *svc-deps, seata: { condition: service_healthy } }
 
   mall-order:
     <<: *svc
     build: ../mall-order
-    depends_on: { <<: *svc-deps, seata: { condition: service_started }, rabbitmq: { condition: service_healthy } }
+    depends_on: { <<: *svc-deps, seata: { condition: service_healthy }, rabbitmq: { condition: service_healthy } }
 
   mall-pay:
     <<: *svc
@@ -158,7 +204,49 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ../../frontend/dist:/usr/share/nginx/html:ro
-    depends_on: [mall-gateway]
+    depends_on:
+      mall-gateway: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  # ---------------- 监控（OM-020）----------------
+  prometheus:
+    image: prom/prometheus:v2.53.2
+    profiles: ["monitor"]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    ports: ["127.0.0.1:19090:9090"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/-/ready >/dev/null || exit 1"]
+      interval: 10s
+      retries: 12
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    profiles: ["monitor"]
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me-in-env}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/orange-mall.json
+      GF_USERS_DEFAULT_LANGUAGE: zh-Hans
+    ports: ["127.0.0.1:13000:3000"]
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus: { condition: service_healthy }
 
 volumes:
   mysql-data:
+  prometheus-data:

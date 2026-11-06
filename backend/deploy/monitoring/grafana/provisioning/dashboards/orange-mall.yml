@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: orange-mall
+    folder: 橙选商城
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

@@ -26,7 +26,7 @@ mall-gateway :18080（Spring Cloud Gateway）
   seckill   :9007  四层防护 + Kafka 异步落库 + 提交前预热 + 一致性巡检
    │
    └─ 基础设施（docker compose）：MySQL 8 · Redis 7 · RabbitMQ 3.13（TTL+DLX）· Kafka（KRaft；秒杀主题 12 分区）
-      Nacos v2.3.2（注册中心）· Seata 2.0.0（AT，file 模式）· Nginx 1.27
+      Nacos v2.3.2（注册中心）· Seata 2.0.0（AT，db 模式：会话 / 分支 / 全局锁落 MySQL `seata` 库）· Nginx 1.27
 ```
 
 共享模块（install 到本地 ~/.m2，被各服务依赖）：
@@ -113,8 +113,14 @@ mall-gateway :18080（Spring Cloud Gateway）
 ## 5. 部署与运行
 
 - **基础设施**：`cd backend/deploy && docker compose up -d`（不加 profile，只起 mysql/redis/rabbit/kafka/nacos/seata）。
-- **全套容器**：先在 `backend/` 下 `mvn -q -f mall-xxx/pom.xml package -DskipTests`（7 个业务 Jar）+
-  前端 `npm run build`，然后 `docker compose --profile app up -d --build`。
+- **全套容器**：先在 `backend/` 下 `mvn clean install -DskipTests`（8 个服务 Jar）+
+  前端 `npm run build`，然后 `docker compose --profile app up -d --build --wait`（按 healthcheck 依次就绪）。
+- **表结构**：各服务 Flyway（`db/migration/V*.sql`，回退 `db/rollback/U*.sql`），空库启动自动建表与种子数据；
+  MySQL init 只建库（`mysql/init/01-databases.sql`）和 Seata TC 表（`02-seata.sql`）。
+- **监控**：`docker compose --profile monitor up -d` → Prometheus（127.0.0.1:19090）抓取各服务 `:8558/actuator/prometheus`
+  （管理端口不经网关），Grafana（127.0.0.1:13000）预置「橙选商城」看板：网关 QPS/P95、系统错误率（`mall_api_errors_total`）、
+  JVM / 连接池、秒杀漏斗 / 在途 / Kafka 积压 / 死信。
+- **备份恢复**：`scripts/backup.sh`、`scripts/restore.sh <dir> --drill`（详见 README）。
   入口：Nginx http://localhost:8090 · 网关 http://localhost:18080 · 只作内部通信的服务不对外暴露。
 - **前端开发模式**：`frontend/` `npm run dev`（Mock）/ `npm run dev:backend`（真后端，代理 /api → 18080）。
 - **验收账号**：普通用户 `13800000000 / 123456`（验证码任意短信场景填 123456）；
@@ -130,7 +136,7 @@ mall-gateway :18080（Spring Cloud Gateway）
 | POST /payments/notify（幂等回调） | 网关 c=100 × 8000 | ≈230 QPS；直连 c=200 ≈400 QPS |
 | 秒杀模拟 1000 并发（后台触发） | 一场库存 50 | 请求 1000 → 售罄 1000、orders 50 = 库存、无超卖、Redis/DB 一致 |
 | Seata 全局回滚 | 强制 marketing.lock 失败 | product.deduct 已扣库存原样恢复（87→87），coordinator 回滚成功 |
-| TTL 关单 | 下单不支付 | 30 分钟后（或 admin 手动触发）订单自动关闭，库存/券/积分全回滚 |
+| TTL 关单 | 下单不支付 | 30 分钟后（或 admin 手动触发）订单自动关闭，库存/券/积分全回滚；关单 CAS 保证补偿只执行一次（Phase 4 修复重复回补缺陷，`OrderCloseTest`） |
 | WS 物流推送 | 发货后 | 12s/步推进，trace 1→4 条，状态 DELIVERING → SIGNED 对 E2E 装填 |
 | 幂等 | 重复回调 | 第一笔 `idempotent:false`，后续全部 `idempotent:true`（callbackCount 累增） |
 

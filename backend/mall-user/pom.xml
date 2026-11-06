@@ -12,6 +12,11 @@
     <description>用户服务：认证、地址、积分、风控、链路日志</description>
 
     <dependencies>
+        <!-- Phase 4：库表由 Flyway 管理（db/migration/V*.sql，回滚补偿 db/rollback/U*.sql） -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.orangemall</groupId>
             <artifactId>mall-web-starter</artifactId>

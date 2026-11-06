@@ -1,33 +1,5 @@
--- 由 gen-seed.ts 生成，请勿手改
-
+-- mall_product 演示种子（由 deploy/mysql/gen-seed.ts 生成；Flyway 冻结后勿重新生成覆盖）
 SET NAMES utf8mb4;
-
-USE mall_user;
-
-INSERT INTO user (id, phone, password_hash, salt, nickname, level, points, credit_score, blocked, risk_hits, last_action, role, created_at) VALUES
-  (1880000000000000001, '13800000000', '3598757b3ef43da46309c607ff038f1f2bce55c47b9743504e244f5406ae8b00', '5215bcfac350b7b8', '橙子用户', 3, 2680, 720, 0, 0, '正常', 'USER', NOW(3) - INTERVAL 2592000 SECOND),
-  (1880000000000000002, '18800000000', '677f0e9fc2822e088315e93f0d7fea06e216cfc25e4682d6cb6e4016c616e4ed', '0ea8b5be6d23d8ea', '运营管理员', 9, 0, 800, 0, 0, '正常', 'ADMIN', NOW(3) - INTERVAL 5184000 SECOND),
-  (1990000000000000101, '19900000101', 'e05388d47ab618eba94e8a333939dedfd0393093c018ca807bd4c139e37d2287', '7bf9b6d8146e6455', '疑似脚本账号A', 1, 0, 120, 1, 386, '1 秒内 40 次秒杀请求', 'USER', NOW(3) - INTERVAL 259200 SECOND),
-  (1990000000000000102, '19900000102', '5035cd2e02cba5157e5a85c8d6cc2cdfcfe7d8d4a92d28e3f528b1a7bf93c06a', '819f79212ada1fd3', '疑似黄牛账号B', 1, 0, 260, 0, 92, '同设备 6 个账号下单', 'USER', NOW(3) - INTERVAL 172800 SECOND),
-  (1990000000000000103, '19900000103', 'a9827ee31be71535424e40d22327ddba2c74d73d817bbf694d928ab263fdb4cb', '41f6cb70f3aad699', '新注册账号C', 1, 0, 410, 0, 17, '注册 2 分钟即参与秒杀', 'USER', NOW(3) - INTERVAL 86400 SECOND);
-
-INSERT INTO address (id, user_id, receiver, phone, province, city, district, detail, is_default) VALUES
-  (1880000000000100001, 1880000000000000001, '张三', '13800000000', '陕西省', '汉中市', '汉台区', '天汉大道 88 号 橙选小区 3 栋 1201', 1),
-  (1880000000000100002, 1880000000000000001, '张三', '13800000000', '陕西省', '西安市', '雁塔区', '科技路 10 号 软件园 B 座 6 层', 0);
-
-INSERT INTO points_record (id, user_id, change_amount, reason, created_at) VALUES
-  (1880000000000200001, 1880000000000000001, 200, '新用户注册奖励', NOW(3) - INTERVAL 1728000 SECOND),
-  (1880000000000200002, 1880000000000000001, 2480, '历史订单确认收货', NOW(3) - INTERVAL 518400 SECOND);
-
-INSERT INTO points_goods (id, name, art, tint, points, stock, coupon_template_id, coupon_amount, coupon_title, sort) VALUES
-  ('PG1', '5 元无门槛券', 'book', '#ff6a00', 500, 999, 'CT04', 500, '积分兑换 5 元券', 1),
-  ('PG2', '小橙定制帆布袋', 'luggage', '#f3a25b', 1200, 120, NULL, NULL, NULL, 2),
-  ('PG3', '每日坚果体验装', 'snack', '#d99a4a', 800, 300, NULL, NULL, NULL, 3),
-  ('PG4', '声悦 Buds 3 耳机', 'earbuds', '#e9edf3', 19900, 8, NULL, NULL, NULL, 4),
-  ('PG5', '挂耳咖啡 10 包', 'coffee', '#8b5a3c', 990, 260, NULL, NULL, NULL, 5),
-  ('PG6', '积木钥匙扣', 'toy', '#f2b134', 600, 0, NULL, NULL, NULL, 6);
-
-USE mall_product;
 
 INSERT INTO category (id, parent_id, name, icon, sort) VALUES
   (1, 0, '数码家电', 'phone', 1),
@@ -217,40 +189,3 @@ INSERT INTO notice (id, title, date, content) VALUES
   ('N2', '关于部分地区物流时效调整的通知', '2026-10-26', '大促期间部分偏远地区配送时效延长 1-2 天。'),
   ('N3', '新用户专享礼包上线，注册即领！', '2026-10-25', '注册即送 10 元无门槛券 + 200 积分。'),
   ('N4', '秒杀规则说明：每人每场限购 1 件', '2026-10-22', '同一账号、设备、收货地址视为同一用户。');
-
-USE mall_marketing;
-
-INSERT INTO coupon_template (id, title, type, threshold, amount, scope, scope_root_id, total, received, valid_days, per_user_limit, start_at, end_at) VALUES
-  ('CT01', '双11 全场通用券', 'FULL_REDUCTION', 49900, 5000, '全场通用（秒杀商品除外）', NULL, 10000, 6820, 7, 1, NOW(3) - INTERVAL 86400 SECOND, NOW(3) + INTERVAL 864000 SECOND),
-  ('CT02', '双11 大额神券', 'FULL_REDUCTION', 99900, 10000, '全场通用（秒杀商品除外）', NULL, 5000, 4410, 7, 1, NOW(3) - INTERVAL 86400 SECOND, NOW(3) + INTERVAL 864000 SECOND),
-  ('CT03', '数码家电品类券', 'FULL_REDUCTION', 300000, 30000, '限数码家电品类', 1, 2000, 1200, 5, 1, NOW(3) - INTERVAL 86400 SECOND, NOW(3) + INTERVAL 518400 SECOND),
-  ('CT04', '新人无门槛券', 'NO_THRESHOLD', 0, 1000, '新用户专享', NULL, 20000, 9300, 3, 1, NOW(3) - INTERVAL 86400 SECOND, NOW(3) + INTERVAL 1728000 SECOND),
-  ('CT05', '美妆个护 9 折券', 'DISCOUNT', 20000, 90, '限美妆个护品类', 4, 3000, 2990, 7, 1, NOW(3) - INTERVAL 86400 SECOND, NOW(3) + INTERVAL 691200 SECOND),
-  ('CT06', '食品生鲜满减券', 'FULL_REDUCTION', 9900, 1500, '限食品生鲜品类', 5, 8000, 3100, 7, 2, NOW(3) - INTERVAL 86400 SECOND, NOW(3) + INTERVAL 777600 SECOND),
-  ('CT07', '服饰鞋包满减券', 'FULL_REDUCTION', 39900, 6000, '限服饰鞋包品类', 2, 6000, 6000, 7, 1, NOW(3) - INTERVAL 86400 SECOND, NOW(3) + INTERVAL 777600 SECOND),
-  ('CT08', '家居生活满减券', 'FULL_REDUCTION', 199900, 20000, '限家居生活品类', 3, 1500, 400, 7, 1, NOW(3) - INTERVAL 86400 SECOND, NOW(3) + INTERVAL 777600 SECOND);
-
-USE mall_order;
-
-INSERT INTO t_order_1 (id, user_id, status, source, goods_amount, freight, full_reduction, coupon_deduct, points_deduct, seckill_deduct, pay_amount, points_used, address_json, pay_deadline, paid_at, shipped_at, completed_at, closed_at, close_reason, pay_channel, payment_no, logistics_json, created_at) VALUES
-  (2120394857100001281, 1880000000000000001, 'COMPLETED', 'NORMAL', 15800, 0, 0, 0, 0, 0, 15800, 0, '{"id":"1880000000000100001","receiver":"张三","phone":"13800000000","province":"陕西省","city":"汉中市","district":"汉台区","detail":"天汉大道 88 号 橙选小区 3 栋 1201","isDefault":true}', NOW(3) - INTERVAL 516600 SECOND, NOW(3) - INTERVAL 518340 SECOND, NOW(3) - INTERVAL 514800 SECOND, NOW(3) - INTERVAL 345600 SECOND, NULL, NULL, 'ALIPAY', 'P2120394857100001281', '{"company":"顺丰速运","trackingNo":"SF7100001281","state":"SIGNED","traces":[{"time":"2026-11-01T17:33:28.745Z","state":"SIGNED","desc":"已签收，签收人：本人。感谢使用顺丰速运","location":"汉中市"},{"time":"2026-10-31T22:21:28.745Z","state":"IN_TRANSIT","desc":"快件已到达【汉中转运中心】","location":"汉中市"},{"time":"2026-10-31T00:45:28.745Z","state":"IN_TRANSIT","desc":"快件已从【西安集散中心】发出","location":"西安市"},{"time":"2026-10-30T18:33:28.745Z","state":"COLLECTED","desc":"顺丰速运已收取快件","location":"西安市"}]}', NOW(3) - INTERVAL 518400 SECOND),
-  (2120394857100002561, 1880000000000000001, 'SHIPPED', 'NORMAL', 91800, 0, 0, 0, 0, 0, 91800, 0, '{"id":"1880000000000100001","receiver":"张三","phone":"13800000000","province":"陕西省","city":"汉中市","district":"汉台区","detail":"天汉大道 88 号 橙选小区 3 栋 1201","isDefault":true}', NOW(3) - INTERVAL 171000 SECOND, NOW(3) - INTERVAL 172740 SECOND, NOW(3) - INTERVAL 169200 SECOND, NULL, NULL, NULL, 'ALIPAY', 'P2120394857100002561', '{"company":"顺丰速运","trackingNo":"SF7100002561","state":"IN_TRANSIT","traces":[{"time":"2026-11-04T22:21:28.745Z","state":"IN_TRANSIT","desc":"快件已到达【汉中转运中心】","location":"汉中市"},{"time":"2026-11-04T00:45:28.745Z","state":"IN_TRANSIT","desc":"快件已从【西安集散中心】发出","location":"西安市"},{"time":"2026-11-03T18:33:28.745Z","state":"COLLECTED","desc":"顺丰速运已收取快件","location":"西安市"}]}', NOW(3) - INTERVAL 172800 SECOND),
-  (2120394857100003841, 1880000000000000001, 'PAID', 'NORMAL', 7900, 0, 0, 0, 0, 0, 7900, 0, '{"id":"1880000000000100001","receiver":"张三","phone":"13800000000","province":"陕西省","city":"汉中市","district":"汉台区","detail":"天汉大道 88 号 橙选小区 3 栋 1201","isDefault":true}', NOW(3) - INTERVAL 84600 SECOND, NOW(3) - INTERVAL 86340 SECOND, NULL, NULL, NULL, NULL, 'ALIPAY', 'P2120394857100003841', NULL, NOW(3) - INTERVAL 86400 SECOND),
-  (2120394857100005121, 1880000000000000001, 'CLOSED', 'NORMAL', 32900, 0, 0, 0, 0, 0, 32900, 0, '{"id":"1880000000000100001","receiver":"张三","phone":"13800000000","province":"陕西省","city":"汉中市","district":"汉台区","detail":"天汉大道 88 号 橙选小区 3 栋 1201","isDefault":true}', NOW(3) - INTERVAL 257400 SECOND, NULL, NULL, NULL, NOW(3) - INTERVAL 257400 SECOND, '超时未支付，系统自动关闭（延迟队列）', NULL, NULL, NULL, NOW(3) - INTERVAL 259200 SECOND);
-
--- OM-015：收货人/手机号冗余列（管理端检索走索引，不再 JSON_EXTRACT 全表扫）
-UPDATE t_order_1 SET receiver = JSON_UNQUOTE(JSON_EXTRACT(address_json, '$.receiver')), phone = JSON_UNQUOTE(JSON_EXTRACT(address_json, '$.phone')) WHERE receiver IS NULL;
-
-INSERT INTO t_order_item_1 (order_id, user_id, sku_id, spu_id, name, spec_text, art, tint, price, count, created_at) VALUES
-  (2120394857100001281, 1880000000000000001, 101501, 1015, '小橙优选 每日坚果 30 袋装', '30 袋', 'snack', '#d99a4a', 6900, 1, NOW(3) - INTERVAL 518400 SECOND),
-  (2120394857100001281, 1880000000000000001, 102401, 1024, '慢咖 挂耳咖啡 精品阿拉比卡 50 包', '中深烘', 'coffee', '#8b5a3c', 8900, 1, NOW(3) - INTERVAL 518400 SECOND),
-  (2120394857100002561, 1880000000000000001, 100801, 1008, '跃动 Cloud 轻量缓震跑鞋', '云白 / 39', 'sneaker', '#f2f2f2', 45900, 2, NOW(3) - INTERVAL 172800 SECOND),
-  (2120394857100003841, 1880000000000000001, 101701, 1017, '《高并发系统设计实战》', '平装', 'book', '#ff6a00', 7900, 1, NOW(3) - INTERVAL 86400 SECOND),
-  (2120394857100005121, 1880000000000000001, 101201, 1012, '花研 修护精华水乳套装', '标准装', 'skincare', '#e9d7b5', 32900, 1, NOW(3) - INTERVAL 259200 SECOND);
-
-USE mall_pay;
-
-INSERT INTO payment (payment_no, order_id, user_id, channel, amount, status, qr_code, expire_at, callback_count, paid_at, created_at) VALUES
-  ('P2120394857100001281', 2120394857100001281, 1880000000000000001, 'ALIPAY', 15800, 'SUCCESS', 'https://qr.alipay-sandbox.com/P2120394857100001281', NOW(3) - INTERVAL 516600 SECOND, 1, NOW(3) - INTERVAL 518340 SECOND, NOW(3) - INTERVAL 518400 SECOND),
-  ('P2120394857100002561', 2120394857100002561, 1880000000000000001, 'ALIPAY', 91800, 'SUCCESS', 'https://qr.alipay-sandbox.com/P2120394857100002561', NOW(3) - INTERVAL 171000 SECOND, 1, NOW(3) - INTERVAL 172740 SECOND, NOW(3) - INTERVAL 172800 SECOND),
-  ('P2120394857100003841', 2120394857100003841, 1880000000000000001, 'ALIPAY', 7900, 'SUCCESS', 'https://qr.alipay-sandbox.com/P2120394857100003841', NOW(3) - INTERVAL 84600 SECOND, 1, NOW(3) - INTERVAL 86340 SECOND, NOW(3) - INTERVAL 86400 SECOND);

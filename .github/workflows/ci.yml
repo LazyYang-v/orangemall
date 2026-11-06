@@ -1,0 +1,87 @@
+# CI 门禁（Phase 4）：后端编译 + 单测 + Testcontainers 集成测试 → 镜像构建；Flyway 迁移 up/down 往返；前端类型检查 + 构建。
+# 端到端冒烟（整栈 + Playwright）见 e2e.yml。
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend · test + images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # 单测 + Testcontainers（MySQL 8 / Redis 7，runner 自带 Docker）
+      - name: mvn verify
+        working-directory: backend
+        run: mvn -B clean verify
+
+      - name: Test report
+        if: always()
+        run: |
+          {
+            echo "### 后端测试"
+            echo '| 模块 | 用例 | 失败 | 错误 | 跳过 |'
+            echo '|---|---|---|---|---|'
+            for f in backend/*/target/surefire-reports/TEST-*.xml; do
+              [ -f "$f" ] || continue
+              m=$(echo "$f" | cut -d/ -f2); c=$(basename "$f" .xml | sed 's/^TEST-//; s/.*\.//')
+              t=$(grep -o 'tests="[0-9]*"' "$f" | head -1 | tr -dc 0-9); fl=$(grep -o 'failures="[0-9]*"' "$f" | head -1 | tr -dc 0-9)
+              e=$(grep -o 'errors="[0-9]*"' "$f" | head -1 | tr -dc 0-9); s=$(grep -o 'skipped="[0-9]*"' "$f" | head -1 | tr -dc 0-9)
+              echo "| $m · $c | $t | $fl | $e | $s |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build service images
+        working-directory: backend/deploy
+        run: |
+          printf 'JWT_SECRET=ci\nPAY_SANDBOX_KEY=ci\nINNER_SECRET=ci\n' > .env
+          docker compose --profile app build
+
+      - name: Upload surefire reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: backend/*/target/surefire-reports
+          retention-days: 7
+
+  migrations:
+    name: flyway · up/down 往返
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Round-trip every service schema (V1→Vn → Un→U1 → Vn)
+        run: scripts/db/migration-roundtrip.sh | tee -a "$GITHUB_STEP_SUMMARY"
+
+  frontend:
+    name: frontend · typecheck + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: vue-tsc + vite build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build

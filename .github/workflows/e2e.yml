@@ -52,8 +52,10 @@ jobs:
       - name: Start stack
         working-directory: backend/deploy
         run: |
-          docker compose up -d
-          docker compose --profile app up -d --build
+          docker compose up -d --build
+          # OM-018：依赖链按 healthcheck 编排（infra → 业务服务 readiness → 网关 → Nginx），--wait 等全部 healthy；
+          # 空库由各服务 Flyway 启动时建表 + 灌种子数据
+          docker compose --profile app up -d --build --wait --wait-timeout 900 || { docker compose --profile app ps; docker compose --profile app logs --tail 80; exit 1; }
 
       - name: Wait for services
         run: |

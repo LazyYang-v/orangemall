@@ -5,7 +5,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.HexFormat;
 
-/** 密码摘要：sha256Hex(salt + ":" + password)，与 02-seed.sql 生成方式一致 */
+/** 密码摘要：sha256Hex(salt + ":" + password)，与演示种子（deploy/mysql/gen-seed.ts → V2__seed.sql）生成方式一致 */
 public final class Passwords {
     private static final SecureRandom RND = new SecureRandom();
 

@@ -12,6 +12,11 @@
     <description>支付服务：沙箱收单、验签、幂等回调、MQ 通知订单</description>
 
     <dependencies>
+        <!-- Phase 4：库表由 Flyway 管理（db/migration/V*.sql，回滚补偿 db/rollback/U*.sql） -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.orangemall</groupId>
             <artifactId>mall-web-starter</artifactId>

@@ -31,7 +31,16 @@ cd backend/deploy && docker compose --profile app up -d --build
 
 # 4) 打开 http://localhost:8090
 #    网关直连：http://localhost:18080
+
+# 5) 可选：监控（Prometheus 127.0.0.1:19090 / Grafana 127.0.0.1:13000，看板「橙选商城」）
+cd backend/deploy && docker compose --profile monitor up -d
 ```
+
+- **表结构**：每个服务用 Flyway 管理自己的库（`mall-*/src/main/resources/db/migration`，回退脚本在 `db/rollback`），
+  空库启动即建表 + 灌种子数据；`scripts/db/migration-roundtrip.sh` 在一次性 MySQL 上验证每个版本 up → down → up。
+- **启动顺序**：compose 按 healthcheck 编排（基础设施 → 业务服务 readiness → 网关 → Nginx），可用 `up -d --wait` 等待全部就绪。
+- **备份 / 恢复**：`scripts/backup.sh`（MySQL 全部业务库 + seata 库 + Redis RDB，带清单与校验和，保留 7 份）；
+  `scripts/restore.sh <备份目录> --drill` 在一次性容器里恢复并逐表核对行数（不碰线上），`--into-live --yes` 才会覆盖本机库。
 
 > 部署密钥（JWT / 支付回调 / 服务间内部）必须经 .env 注入，缺省值仅供本地开发；
 > compose 在缺失时会直接报错并提示复制 .env.example。
@@ -55,7 +64,7 @@ CI 见 `.github/workflows/e2e.yml`）；375px 横向溢出体检：`node scripts
 - **契约驱动**：`docs/api-contract.md` 是前后端唯一规范，前端 Mock 与真实后端行为一一对应。
 - **网关统一鉴权**：JWT + Redis 黑名单，`/api/admin/**` 角色隔离，链路 ID 全链路透传。
 - **订单分片**：4 分片按 `user_id & 3`，用户侧单片路由、管理端 UNION ALL 聚合。
-- **Seata AT**：下单「扣库存→锁券→扣积分」跨服务事务，任一失败全局回滚（已实测）。
+- **Seata AT**：下单「扣库存→锁券→扣积分」跨服务事务，任一失败全局回滚（已实测）；TC 用 db 模式，压测中重启 TC 在途事务全部收敛（`bench/drills/seata-restart.sh`）。
 - **消息**：RabbitMQ TTL+DLX 延迟关单；Kafka 3 分区秒杀削峰（DB 乐观锁兜底、内部重试与补偿）。
 - **秒杀四层防护**：令牌桶限流 → path/风控 → Lua 单购+原子扣减 → 异步落库，Redis/DB 在途对账巡检。
 - **沙箱支付**：HMAC 签名异步回调、幂等、金额校验、审计日志、MQ 通知换状态。
