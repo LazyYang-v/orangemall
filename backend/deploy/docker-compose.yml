@@ -91,6 +91,9 @@ services:
       JVM_XMS: 256m
       JVM_XMX: 384m
       JVM_XMN: 128m
+      # 镜像自带 JDK 8u372：在 cgroup v2 的 GitHub runner 上读容器指标会 NPE（CgroupV2Subsystem.getInstance），
+      # Nacos 启动即退出。堆已用 JVM_X* 显式指定，关闭容器检测无副作用。
+      JAVA_OPT_EXT: "-XX:-UseContainerSupport"
       NACOS_AUTH_ENABLE: "false"
     ports: ["8848:8848", "9848:9848"]
     healthcheck:
@@ -106,6 +109,8 @@ services:
       SEATA_IP: ${SEATA_IP:-127.0.0.1}
       JVM_XMS: 192m
       JVM_XMX: 256m
+      # 同 nacos：JDK 8u342 的 cgroup v2 缺陷防护（seata-setup.sh 在此基础上追加参数）
+      JAVA_OPT: "-XX:-UseContainerSupport"
     ports: ["8091:8091", "7091:7091"]
 
   # ---------------- 微服务 ----------------
