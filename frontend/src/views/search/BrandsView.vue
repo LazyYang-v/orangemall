@@ -87,4 +87,7 @@ onMounted(async () => {
 .items .price {
   font-size: 14px;
 }
+@media (max-width: 900px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+}
 </style>

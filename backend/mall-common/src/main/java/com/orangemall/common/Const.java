@@ -9,6 +9,8 @@ public final class Const {
     public static final String H_USER_ID = "X-User-Id";
     public static final String H_USER_ROLE = "X-User-Role";
     public static final String H_TRACE = "X-Trace-Id";
+    /** 服务间内部调用密钥头：/inner/** 校验（网关不路由 /inner，仍须防内网裸调用） */
+    public static final String H_INNER_KEY = "X-Inner-Key";
     public static final String MDC_TRACE = "traceId";
 
     /* ---------- Redis ---------- */
@@ -33,10 +35,16 @@ public final class Const {
     public static final String MQ_ORDER_CLOSE_EXCHANGE = "order.close.exchange";
     public static final String MQ_ORDER_CLOSE_QUEUE = "order.close.queue";
     public static final String MQ_ORDER_CLOSE_KEY = "order.close";
+    /** 业务死信：消费抛异常的消息经队列级 DLX 落入 DLQ，由兜底消费者重驱动（幂等处理器） */
+    public static final String MQ_ORDER_CLOSE_DLX_EXCHANGE = "order.close.dlx";
+    public static final String MQ_ORDER_CLOSE_DLQ = "order.close.dlq";
     /** 支付成功：支付服务 → 订单服务 */
     public static final String MQ_PAY_EXCHANGE = "pay.exchange";
     public static final String MQ_PAY_SUCCESS_QUEUE = "order.pay.success.queue";
     public static final String MQ_PAY_SUCCESS_KEY = "pay.success";
+    public static final String MQ_PAY_DLX_EXCHANGE = "pay.notify.dlx";
+    public static final String MQ_PAY_DLQ = "pay.notify.dlq";
+    public static final String MQ_PAY_DLQ_KEY = "pay.notify";
 
     /* ---------- Kafka ---------- */
     public static final String KAFKA_SECKILL_TOPIC = "seckill-order";

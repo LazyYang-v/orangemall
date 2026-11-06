@@ -7,7 +7,6 @@ import com.orangemall.api.dto.PaySuccessMsg;
 import com.orangemall.common.BizException;
 import com.orangemall.common.Const;
 import com.orangemall.common.IdGenerator;
-import com.orangemall.common.JwtUtil;
 import com.orangemall.pay.entity.Payment;
 import com.orangemall.pay.entity.PayNotifyLog;
 import com.orangemall.pay.mapper.NotifyLogMapper;
@@ -15,7 +14,6 @@ import com.orangemall.pay.mapper.PayMapper;
 import com.orangemall.web.OpsLogger;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -34,14 +32,16 @@ public class PayService {
     private final OpsLogger ops;
     private final OrderInnerClient orders;
     private final RabbitTemplate rabbit;
-    @Value("${mall.pay.sandbox-key:orange-mall-sandbox-key-2026}")
-    private String sandboxKey;
+    private final SandboxSigner signer;
+    private final RefundService refund;
 
     public Map<String, Object> create(long userId, Long orderId, String channel) {
         OrderBrief brief = orders.brief(orderId).unwrap();
         if (!"PENDING_PAYMENT".equals(brief.status())) {
             throw new BizException(6001, "CLOSED".equals(brief.status()) ? "订单已超时关闭" : "订单状态不可支付");
         }
+        // 越权防护：只能为本人订单创建支付流水（不区分存在/非本人，统一 6002 防枚举）
+        if (!brief.userId().equals(userId)) throw new BizException(6002, "支付流水不存在");
         // 同一订单同一渠道复用未完成流水
         Payment p = payMapper.selectList(new LambdaUpdateWrapper<Payment>()
                 .eq(Payment::getOrderId, orderId).eq(Payment::getChannel, channel).eq(Payment::getStatus, "PENDING")
@@ -74,26 +74,37 @@ public class PayService {
         return vo;
     }
 
-    public Map<String, Object> status(String paymentNo) {
-        Payment p = find(paymentNo);
+    public Map<String, Object> status(long userId, String paymentNo) {
+        Payment p = findOwned(userId, paymentNo);
         return Map.of("status", p.getStatus(), "orderId", String.valueOf(p.getOrderId()), "callbackCount", p.getCallbackCount());
     }
 
     /** 沙箱「扫码支付」：生成带签名的回调报文（真实环境由支付宝/微信服务器发起） */
-    public Map<String, Object> sandboxPay(String paymentNo, boolean success) {
-        Payment p = find(paymentNo);
+    public Map<String, Object> sandboxPay(long userId, String paymentNo, boolean success) {
+        Payment p = findOwned(userId, paymentNo);
         String tradeStatus = success ? "TRADE_SUCCESS" : "TRADE_CLOSED";
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("paymentNo", p.getPaymentNo());
         out.put("amount", p.getAmount());
         out.put("tradeStatus", tradeStatus);
-        out.put("sign", sign(p.getPaymentNo(), p.getAmount(), tradeStatus));
+        out.put("sign", signer.pay(p.getPaymentNo(), p.getAmount(), tradeStatus));
         return out;
     }
 
     public Map<String, Object> notify(String paymentNo, int amount, String tradeStatus, String sign) {
+        notify(paymentNo, null, amount, tradeStatus, sign);
+        return Map.of("result", "success");
+    }
+
+    /** 统一回调入口：tradeStatus=REFUND_SUCCESS 走退款分支（docs/refund-design.md §3） */
+    public Map<String, Object> notify(String paymentNo, Long refundId, int amount, String tradeStatus, String sign) {
         String pn = paymentNo;
-        if (!sign(pn, amount, tradeStatus).equals(sign)) {
+        if (tradeStatus.equals("REFUND_SUCCESS")) {
+            refund.handleRefundNotify(pn, refundId, amount, sign);
+            audit(pn, tradeStatus, amount, true, "REFUND_SUCCESS");
+            return Map.of("result", "success", "channelRefund", true);
+        }
+        if (!signer.pay(pn, amount, tradeStatus).equals(sign)) {
             ops.log("PAY", "[回调] " + pn + " 验签失败，拒绝处理");
             audit(pn, tradeStatus, amount, false, "BAD_SIGN");
             throw new BizException(6003, "验签失败");
@@ -147,9 +158,11 @@ public class PayService {
                 .stream().findFirst().orElseThrow(() -> new BizException(6002, "支付流水不存在"));
     }
 
-    /** 沙箱签名（真实环境为支付宝 RSA2 / 微信 V3） */
-    private String sign(String paymentNo, int amount, String tradeStatus) {
-        return JwtUtil.hmacHex(paymentNo + "|" + amount + "|" + tradeStatus, sandboxKey);
+    /** 本人流水查询：非本人订单一律 6002（防流水号枚举探测他人支付） */
+    private Payment findOwned(long userId, String paymentNo) {
+        Payment p = find(paymentNo);
+        if (!p.getUserId().equals(userId)) throw new BizException(6002, "支付流水不存在");
+        return p;
     }
 
     /** 每次回调留痕 */

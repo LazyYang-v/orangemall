@@ -101,7 +101,7 @@ public class AdminSeckillService {
                         msg.put("skuId", a.getSkuId());
                         msg.put("seckillPrice", a.getSeckillPrice());
                         msg.put("sim", true);
-                        kafka.send(Const.KAFKA_SECKILL_TOPIC, activityId, om.writeValueAsString(msg));
+                        kafka.send(Const.KAFKA_SECKILL_TOPIC, String.valueOf(simUser), om.writeValueAsString(msg));
                     }
                 } catch (Exception e) {
                     log.warn("sim user failed: {}", e.getMessage());

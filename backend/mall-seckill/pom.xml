@@ -12,6 +12,11 @@
     <description>秒杀服务：场次滚动、令牌桶限流、动态 path、Lua 原子扣减、Kafka 异步下单、库存一致性校验</description>
 
     <dependencies>
+        <!-- OM-025：Feign 走 OkHttp 连接池（JDK HttpURLConnection 每主机仅保活 5 条空闲连接，12 线程落单时反复建连） -->
+        <dependency>
+            <groupId>io.github.openfeign</groupId>
+            <artifactId>feign-okhttp</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.orangemall</groupId>
             <artifactId>mall-web-starter</artifactId>

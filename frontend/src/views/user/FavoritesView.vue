@@ -36,4 +36,7 @@ h3 {
 .grid :deep(.pcard) {
   border-color: var(--c-border);
 }
+@media (max-width: 900px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 </style>

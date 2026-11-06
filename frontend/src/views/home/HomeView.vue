@@ -92,6 +92,11 @@ onUnmounted(() => io?.disconnect())
   grid-template-columns: 214px 1fr 292px;
   gap: 16px;
 }
+@media (max-width: 900px) {
+  .hero-row {
+    grid-template-columns: 1fr;
+  }
+}
 .mid {
   display: flex;
   flex-direction: column;
@@ -103,6 +108,11 @@ onUnmounted(() => io?.disconnect())
   grid-template-columns: 544fr 390fr 320fr;
   gap: 16px;
   margin-top: 16px;
+}
+@media (max-width: 900px) {
+  .promo-row {
+    grid-template-columns: 1fr;
+  }
 }
 .guess {
   margin-top: 24px;
@@ -128,5 +138,12 @@ onUnmounted(() => io?.disconnect())
   padding: 24px 0 0;
   color: var(--c-text-3);
   min-height: 40px;
+}
+@media (max-width: 900px) {
+  .hero-row > *, .promo-row > * { min-width: 0; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .hero-row > :first-child { display: none; }
 }
 </style>

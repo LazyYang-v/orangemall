@@ -25,7 +25,7 @@ mall-gateway :18080（Spring Cloud Gateway）
   pay       :9006  沙箱收单 + 异步回调（HMAC 验签/CAS/MQ/幂等/审计）
   seckill   :9007  四层防护 + Kafka 异步落库 + 提交前预热 + 一致性巡检
    │
-   └─ 基础设施（docker compose）：MySQL 8 · Redis 7 · RabbitMQ 3.13（TTL+DLX）· Kafka（KRaft，3 分区）
+   └─ 基础设施（docker compose）：MySQL 8 · Redis 7 · RabbitMQ 3.13（TTL+DLX）· Kafka（KRaft；秒杀主题 12 分区）
       Nacos v2.3.2（注册中心）· Seata 2.0.0（AT，file 模式）· Nginx 1.27
 ```
 
@@ -66,10 +66,15 @@ mall-gateway :18080（Spring Cloud Gateway）
      风控（risk:credit / risk:blocked）→ 7009。
   2. `stock.lua`：bought SET 单人单购 → 7005 重复购买；DECR Redis 库存原子扣减（<0 回补）→ 7005 售罄；
      成功则 SADD bought + INCR inflight。
-  3. Kafka `seckill-order`（3 分区，key=activityId）削峰；消费端 `SeckillOrderProcessor` 内部重试
-     （1s→2s→4s→8s×2 ≈ 23s），耗尽后补偿（回补 Redis/DB、置 FAILED 并留档）。
-  4. DB 乐观锁兜底：`UPDATE … WHERE stock>0` + `seckill_order` 唯一键幂等 + Feign `order.createSeckill`
-     生成真实订单（幂等 orderId）。模拟请求（sim=true，admin 触发）只扣库存统计、不真实建单。
+  3. Kafka `seckill-order`（12 分区，key=userId，12 消费线程）削峰；消费端 `SeckillOrderProcessor` 内部重试
+     （1s→2s→4s→8s×2 ≈ 23s），耗尽后补偿（回补 Redis/DB、删成交记录、置 FAILED），非法/投毒/耗尽消息一律进
+     `seckill-order.DLT` 并落 `seckill_dead_letter` 留档告警（OM-019）。
+  4. DB 兜底：`SeckillDeductBatcher` 合并器把并发落单请求按活动合批，同一本地事务内
+     `INSERT IGNORE seckill_order`（唯一键一人一单/重试幂等）→ `UPDATE … stock = stock − k WHERE stock >= k`；
+     整批不足时回滚并逐条 `WHERE stock > 0`。随后 Feign `order.createSeckill`（本地事务，幂等 orderId）生成真实订单。
+     模拟请求（sim=true，admin 触发）只扣库存统计、不真实建单。
+- **在途巡检（OM-013）**：在途计数持续不变 ≥ 180s 告警；主题无积压视为泄漏并自动重置，有积压只告警；
+  后台可查看消费者状态/积压/死信、暂停恢复消费者（演练）、手动/强制重置在途。
 - **一致性巡检**：每 60s 对比 Redis 剩余 = DB 剩余 − inflight，在途归零且不一致时以 DB 为准自动修复；
   admin /admin/cache 展示逐 key 校验结果。
 - **滚动建场**：每 30s 以 `k=-1..2` 窗口 INSERT IGNORE 生成 8 商品/场次（2 小时一场，

@@ -3,7 +3,7 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { adminApi, type OpsLog } from '@/api/admin'
 import { formatTime } from '@/utils/format'
 
-const TYPES: Array<[OpsLog['type'] | '', string]> = [['', '全部'], ['ORDER', '订单'], ['PAY', '支付'], ['MQ', '消息队列'], ['CACHE', '缓存'], ['SECKILL', '秒杀'], ['RISK', '风控']]
+const TYPES: Array<[OpsLog['type'] | '', string]> = [['', '全部'], ['ORDER', '订单'], ['PAY', '支付'], ['MQ', '消息队列'], ['CACHE', '缓存'], ['SECKILL', '秒杀'], ['RISK', '风控'], ['REFUND', '售后'], ['ALERT', '告警']]
 const type = ref<OpsLog['type'] | ''>('')
 const list = ref<OpsLog[]>([])
 const auto = ref(true)
@@ -79,4 +79,6 @@ onUnmounted(() => clearInterval(timer))
 .CACHE { color: #7fd6e8; }
 .SECKILL { color: #ff8a65; }
 .RISK { color: #ff6b81; }
+.REFUND { color: #c3a6ff; }
+.ALERT { color: #fff; background: #d93025; padding: 0 4px; border-radius: 3px; }
 </style>

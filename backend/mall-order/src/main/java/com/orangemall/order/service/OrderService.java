@@ -14,6 +14,8 @@ import com.orangemall.web.OpsLogger;
 import com.orangemall.web.Notifier;
 import com.orangemall.web.UserContext;
 import io.seata.spring.annotation.GlobalTransactional;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -36,6 +38,13 @@ public class OrderService {
     private static final long ORDER_TTL_MINUTES = 30;
     private static final long SECKILL_TTL_MINUTES = 10;
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
+    /**
+     * 秒杀落单的 SKU 快照本地缓存（OM-025）：同一场活动的上千单都是同一个 SKU，每单 Feign 一次商品服务纯属浪费。
+     * 只缓存展示/原价字段（名称、规格、原价），成交价来自秒杀消息本身；10s 过期，后台改价最多延迟 10s 生效。
+     */
+    private static final long SKU_TTL_MS = 10_000;
+    private record CachedSku(SkuInfo sku, long at) {}
+    private final java.util.concurrent.ConcurrentHashMap<Long, CachedSku> seckillSkus = new java.util.concurrent.ConcurrentHashMap<>();
 
     private final OrderMapper orderMapper;
     private final OrderAssembler assembler;
@@ -209,6 +218,8 @@ public class OrderService {
         o.setPointsUsed(calc.pointsUsed());
         o.setRemark((String) body.get("remark"));
         o.setAddressJson(assembler.addressJson(address));
+        o.setReceiver(address.receiver());
+        o.setPhone(address.phone());
         o.setPayDeadline(now.plus(Duration.ofMinutes(ORDER_TTL_MINUTES)));
         o.setCreatedAt(now);
         o.setUpdatedAt(now);
@@ -263,9 +274,27 @@ public class OrderService {
         q.setStatuses(status == null || status.isEmpty() ? null : List.of(status));
         // 空串视为未传（JS 客户端常把空参数一并发送），避免拼出 source = '' 恒假条件
         q.setSource(source == null || source.isEmpty() ? null : source);
-        q.setKeyword(keyword == null || keyword.isEmpty() ? null : "%" + keyword + "%");
+        applyAdminKeyword(q, keyword);
         q.setAdminKeyword(true);
         return paged(q, page, size);
+    }
+
+    /**
+     * OM-015：按关键词形态分流，保证每条分支都能命中索引（不再 %kw% 全分片扫描）。
+     * 15 位以上纯数字 → 订单号主键精确；其余纯数字 → 手机号前缀（idx_phone）；否则 → 收货人前缀（idx_receiver）。
+     */
+    static void applyAdminKeyword(OrderMapper.ListQuery q, String keyword) {
+        String kw = keyword == null ? "" : keyword.trim();
+        if (kw.isEmpty()) return;
+        if (kw.matches("\\d{15,19}")) {
+            q.setKeywordMode("ID");
+            q.setKeywordId(Long.parseLong(kw));
+            q.setKeyword(kw);
+            return;
+        }
+        q.setKeywordMode(kw.matches("\\d{1,11}") ? "PHONE" : "RECEIVER");
+        // LIKE 转义（ESCAPE '!'）：用户输入的 % _ ! 按字面匹配
+        q.setKeyword(kw.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%");
     }
 
     private PageResult<OrderVO> paged(OrderMapper.ListQuery q, int page, int size) {
@@ -457,18 +486,53 @@ public class OrderService {
         return new OrderBrief(o.getId(), o.getUserId(), o.getStatus(), o.getPayAmount(), o.getPayDeadline());
     }
 
-    /** 秒杀下单（幂等）：10 分钟延迟关单；发货/支付流程与普通单一致 */
-    @GlobalTransactional(rollbackFor = Exception.class, name = "seckill-create")
+    /** 订单商品行（skuId+count），退款 DONE 时由支付服务用于回补库存 */
+    public List<StockItem> items(long id) {
+        OrderRow o = findAny(id);
+        if (o == null) throw new BizException(5004, "订单不存在");
+        return orderMapper.findItems(o.getSrc(), List.of(id)).stream()
+                .map(i -> new StockItem(i.getSkuId(), i.getCount()))
+                .toList();
+    }
+
+    /**
+     * 售后状态流转（docs/refund-design.md §3）：
+     * REFUND_APPLYING（审批中）→ 只允许自 PAID/SHIPPED/COMPLETED 进入；
+     * REFUNDED / prev_status 回退：由支付服务驱动，from 非空时 CAS。
+     */
+    public boolean refundTransition(long id, String from, String to) {
+        OrderRow o = findAny(id);
+        if (o == null) throw new BizException(5004, "订单不存在");
+        boolean valid = switch (to) {
+            case OrderStatus.REFUND_APPLYING -> List.of(OrderStatus.PAID, OrderStatus.SHIPPED, OrderStatus.COMPLETED).contains(o.getStatus());
+            case OrderStatus.REFUNDED -> OrderStatus.REFUND_APPLYING.equals(o.getStatus());
+            // 回退到售后前的状态：from 必须一致且 to 必须是上述三个目标态之一
+            case OrderStatus.PAID, OrderStatus.SHIPPED, OrderStatus.COMPLETED -> OrderStatus.REFUND_APPLYING.equals(o.getStatus());
+            default -> false;
+        };
+        if (!valid) throw new BizException(5008, "订单状态不可流转到 " + to);
+        if (from != null && !from.equals(o.getStatus())) throw new BizException(5008, "订单当前状态非 " + from + "，流转被拒");
+        int rows = orderMapper.refundState(o.getSrc(), id, from, to, Instant.now());
+        return rows > 0;
+    }
+
+    /**
+     * 秒杀下单（幂等）：10 分钟延迟关单；发货/支付流程与普通单一致。
+     * 本地事务即可（OM-025）：只写订单库两张表，库存/一人一单已在 seckill 侧落定且不在同一全局事务里，
+     * 原 @GlobalTransactional 只是给单分支加了 TC 往返 + undo_log，压测中是落单链路的主要耗时之一。
+     */
+    @Transactional(rollbackFor = Exception.class)
     public long createSeckill(SeckillOrderReq req) {
         OrderRow exists = orderMapper.findOrder(Shard.of(req.orderId()), req.orderId());
         if (exists != null) return req.orderId();
-        SkuInfo sku = product.skus(List.of(req.skuId())).unwrap().stream().findFirst()
-                .orElseThrow(() -> new BizException(2001, "商品不存在"));
-        AddressDTO address = userClient.addresses(req.userId()).unwrap().stream()
+        SkuInfo sku = seckillSku(req.skuId());
+        // 地址只取一次：指定地址 → 默认地址 → 任一地址
+        List<AddressDTO> addrs = userClient.addresses(req.userId()).unwrap();
+        AddressDTO address = addrs.stream()
                 .filter(a -> req.addressId() != null && String.valueOf(a.id()).equals(String.valueOf(req.addressId())))
                 .findFirst()
-                .or(() -> userClient.addresses(req.userId()).unwrap().stream().filter(AddressDTO::isDefault).findFirst())
-                .or(() -> userClient.addresses(req.userId()).unwrap().stream().findFirst())
+                .or(() -> addrs.stream().filter(AddressDTO::isDefault).findFirst())
+                .or(() -> addrs.stream().findFirst())
                 .orElse(null);
         Instant now = Instant.now();
         OrderRow o = new OrderRow();
@@ -483,8 +547,11 @@ public class OrderService {
         o.setPointsUsed(0);
         o.setActivityId(req.activityId());
         o.setPayDeadline(now.plus(Duration.ofMinutes(SECKILL_TTL_MINUTES)));
-        if (address != null) o.setAddressJson(assembler.addressJson(address));
-        else {
+        if (address != null) {
+            o.setAddressJson(assembler.addressJson(address));
+            o.setReceiver(address.receiver());
+            o.setPhone(address.phone());
+        } else {
             Map<String, Object> temp = new LinkedHashMap<>();
             UserBrief u = userClient.user(req.userId()).unwrap();
             temp.put("id", "TEMP");
@@ -496,11 +563,17 @@ public class OrderService {
             temp.put("detail", "请在订单中补充收货地址");
             temp.put("isDefault", false);
             o.setAddressJson(assembler.write(temp));
+            o.setReceiver(u.nickname());
+            o.setPhone(u.phone());
         }
         o.setCreatedAt(now);
         o.setUpdatedAt(now);
         String shard = Shard.of(req.orderId());
-        orderMapper.insertOrder(shard, o);
+        try {
+            orderMapper.insertOrder(shard, o);
+        } catch (DuplicateKeyException dup) {
+            return req.orderId(); // 并发重试已落库：幂等返回
+        }
         OrderItemRow i = new OrderItemRow();
         i.setId(IdGenerator.nextId());
         i.setOrderId(req.orderId());
@@ -517,5 +590,16 @@ public class OrderService {
         rabbit.convertAndSend(Const.MQ_ORDER_DELAY_EXCHANGE, Const.MQ_ORDER_DELAY_10M_KEY, new OrderCloseMsg(req.orderId(), req.userId()));
         ops.log("SECKILL", "[消费] 秒杀订单 " + req.orderId() + " 落库成功，10 分钟延迟关单");
         return req.orderId();
+    }
+
+    private SkuInfo seckillSku(long skuId) {
+        long now = System.currentTimeMillis();
+        CachedSku c = seckillSkus.get(skuId);
+        if (c != null && now - c.at() < SKU_TTL_MS) return c.sku();
+        SkuInfo sku = product.skus(List.of(skuId)).unwrap().stream().findFirst()
+                .orElseThrow(() -> new BizException(2001, "商品不存在"));
+        if (seckillSkus.size() > 1024) seckillSkus.entrySet().removeIf(e -> now - e.getValue().at() >= SKU_TTL_MS);
+        seckillSkus.put(skuId, new CachedSku(sku, now));
+        return sku;
     }
 }

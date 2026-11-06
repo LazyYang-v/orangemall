@@ -215,6 +215,8 @@ CREATE TABLE t_order_0 (
   points_used INT NOT NULL DEFAULT 0,
   remark VARCHAR(200) NULL,
   address_json TEXT NOT NULL COMMENT '收货地址快照',
+  receiver VARCHAR(40) NULL COMMENT '冗余列（OM-015）：收货人，避免 JSON_EXTRACT 检索',
+  phone VARCHAR(20) NULL COMMENT '冗余列（OM-015）：联系电话',
   activity_id VARCHAR(48) NULL COMMENT '秒杀活动',
   pay_deadline DATETIME(3) NOT NULL,
   paid_at DATETIME(3) NULL,
@@ -228,7 +230,9 @@ CREATE TABLE t_order_0 (
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   KEY idx_user_time (user_id, created_at),
-  KEY idx_status (status)
+  KEY idx_status (status),
+  KEY idx_receiver (receiver),
+  KEY idx_phone (phone)
 ) COMMENT '订单分表 0';
 CREATE TABLE t_order_1 LIKE t_order_0;
 CREATE TABLE t_order_2 LIKE t_order_0;
@@ -270,6 +274,8 @@ CREATE TABLE payment (
   expire_at DATETIME(3) NOT NULL,
   callback_count INT NOT NULL DEFAULT 0,
   paid_at DATETIME(3) NULL,
+  refund_no VARCHAR(64) NULL COMMENT '关联退款流水号（refund id）',
+  refunded_amount INT NOT NULL DEFAULT 0,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   UNIQUE KEY uk_payment_no (payment_no) COMMENT '幂等：流水号唯一',
@@ -285,8 +291,33 @@ CREATE TABLE pay_notify_log (
   result VARCHAR(40) NOT NULL COMMENT 'SUCCESS / IDEMPOTENT / BAD_SIGN / AMOUNT_MISMATCH / ...',
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-  KEY idx_payment (payment_no)
-) COMMENT '支付回调日志（对账用）';
+  KEY idx_payment (payment_no),
+  KEY idx_created (created_at)
+) COMMENT '支付回调日志（对账用；每天清理 30 天前记录）';
+
+-- refund_order（docs/refund-design.md；先并入 mall_pay，规模变大再拆独立服务）
+CREATE TABLE refund_order (
+  id BIGINT PRIMARY KEY COMMENT '雪花 ID，同时是退款执行幂等键',
+  order_id BIGINT NOT NULL,
+  user_id BIGINT NOT NULL,
+  payment_no VARCHAR(32) NULL COMMENT '原支付流水（可空=积分全额抵扣单）',
+  type VARCHAR(10) NOT NULL COMMENT 'REFUND 退款 / RETURN 退货退款 / EXCHANGE 换货',
+  reason VARCHAR(200) NOT NULL COMMENT '用户填写的售后原因',
+  amount INT NOT NULL COMMENT '退款金额（分），= payAmount 全额',
+  status VARCHAR(20) NOT NULL DEFAULT 'WAIT_APPROVAL'
+        COMMENT 'WAIT_APPROVAL → APPROVED → REFUNDING → DONE / REJECTED / CANCELLED',
+  prev_status VARCHAR(20) NOT NULL COMMENT '售后申请时订单状态，拒绝/取消后回滚到此',
+  audit_remark VARCHAR(200) NULL COMMENT '运营审批备注',
+  audit_by BIGINT NULL COMMENT '审批人 userId',
+  audit_at DATETIME(3) NULL,
+  refund_trade_no VARCHAR(64) NULL COMMENT '渠道退款流水号（沙箱模拟生成）',
+  done_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  KEY idx_user (user_id, created_at),
+  KEY idx_order (order_id),
+  KEY idx_status (status, updated_at)
+) COMMENT '售后/退款单（同一订单仅一笔进行中：业务侧校验，幂等键=refund id）';
 
 /* ======================= 秒杀服务 mall_seckill ======================= */
 USE mall_seckill;
@@ -324,3 +355,24 @@ ALTER TABLE mall_seckill.seckill_activity
   ADD COLUMN tint VARCHAR(20) NOT NULL DEFAULT '' COMMENT '商品色调快照' AFTER art,
   ADD COLUMN original_price INT NOT NULL DEFAULT 0 COMMENT 'SKU 原价快照' AFTER seckill_price,
   ADD COLUMN warmed TINYINT NOT NULL DEFAULT 0 COMMENT '是否已完成首次预热（Redis 丢失时以 DB stock 回填，不再重算）' AFTER limit_per_user;
+
+-- OM-019：秒杀 Kafka 死信留档（DLT 监听写入；(dlt_partition, dlt_offset) 唯一保证重复投递幂等）
+CREATE TABLE IF NOT EXISTS mall_seckill.seckill_dead_letter (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  activity_id VARCHAR(48) NULL,
+  user_id BIGINT NULL,
+  reason VARCHAR(32) NOT NULL COMMENT 'POISON 非 JSON / INVALID 缺字段 / EXHAUSTED 重试耗尽已补偿 / COMPENSATE_FAILED 补偿失败',
+  error VARCHAR(500) NULL,
+  payload TEXT NOT NULL,
+  src_partition INT NULL,
+  src_offset BIGINT NULL,
+  dlt_partition INT NOT NULL COMMENT 'DLT 发送失败时直接落库：-1 - 源分区',
+  dlt_offset BIGINT NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'NEW' COMMENT 'NEW / RESOLVED',
+  remark VARCHAR(200) NULL,
+  resolved_by BIGINT NULL,
+  resolved_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_dlt_pos (dlt_partition, dlt_offset),
+  KEY idx_status (status, created_at)
+) COMMENT '秒杀死信';

@@ -16,7 +16,10 @@ x-svc: &svc
     SEATA_ADDR: seata:8091
     RABBIT_HOST: rabbitmq
     KAFKA_ADDR: kafka:9092
-    JWT_SECRET: orange-mall-jwt-secret-2026-change-me
+    # 密钥强制来自 .env（见 .env.example）：绝不把真实密钥写进仓库
+    JWT_SECRET: ${JWT_SECRET:?请在 backend/deploy/.env 设置 JWT_SECRET（复制 .env.example）}
+    PAY_SANDBOX_KEY: ${PAY_SANDBOX_KEY:?请在 backend/deploy/.env 设置 PAY_SANDBOX_KEY（复制 .env.example）}
+    INNER_SECRET: ${INNER_SECRET:?请在 backend/deploy/.env 设置 INNER_SECRET（复制 .env.example）}
     JAVA_OPTS: -Xms192m -Xmx320m -XX:MaxMetaspaceSize=160m -Xss512k
   depends_on: &svc-deps
     mysql: { condition: service_healthy }
@@ -82,7 +85,9 @@ services:
       retries: 20
 
   nacos:
-    image: nacos/nacos-server:v2.3.2-slim
+    # 官方镜像 + 替换 JRE（见 nacos/Dockerfile：JDK 8u372 在 cgroup v2 下启动 NPE）
+    build: ./nacos
+    image: orange-mall-nacos:v2.3.2-jre8u504
     environment:
       MODE: standalone
       JVM_XMS: 256m

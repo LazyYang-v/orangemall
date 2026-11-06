@@ -26,7 +26,7 @@ spring:
         - id: user
           uri: lb://mall-user
           predicates:
-            - Path=/api/auth/**,/api/users/**,/api/addresses/**,/api/points/**,/api/admin/risk/**,/api/admin/risk,/api/admin/logs/**,/api/admin/logs,/api/admin/mock/**
+            - Path=/api/auth/**,/api/users/**,/api/addresses/**,/api/points/**,/api/admin/risk/**,/api/admin/risk,/api/admin/logs/**,/api/admin/logs,/api/admin/mock/**,/api/admin/users/**,/api/admin/users
           filters:
             - StripPrefix=1
         - id: product
@@ -56,7 +56,7 @@ spring:
         - id: pay
           uri: lb://mall-pay
           predicates:
-            - Path=/api/payments/**,/api/payments
+            - Path=/api/payments/**,/api/payments,/api/refunds/**,/api/refunds,/api/admin/refunds/**,/api/admin/refunds
           filters:
             - StripPrefix=1
         - id: seckill

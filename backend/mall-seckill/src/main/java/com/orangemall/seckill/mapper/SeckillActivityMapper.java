@@ -13,6 +13,10 @@ public interface SeckillActivityMapper extends BaseMapper<SeckillActivity> {
     @Update("UPDATE seckill_activity SET stock = stock - 1 WHERE id = #{id} AND stock > 0")
     int decrStock(@Param("id") String id);
 
+    /** 合并扣减（OM-025）：一次扣 n 件，库存不足整批不扣（由调用方退回逐条扣减） */
+    @Update("UPDATE seckill_activity SET stock = stock - #{n} WHERE id = #{id} AND stock >= #{n}")
+    int decrStockBy(@Param("id") String id, @Param("n") int n);
+
     @Update("UPDATE seckill_activity SET stock = stock + 1 WHERE id = #{id} AND stock < total_stock")
     int incrStock(@Param("id") String id);
 

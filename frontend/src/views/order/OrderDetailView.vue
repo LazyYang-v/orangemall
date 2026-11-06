@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import type { Order } from '@/types/domain'
+import type { Order, RefundType } from '@/types/domain'
 import { orderApi } from '@/api/order'
+import { refundApi } from '@/api/refund'
 import { useNotify } from '@/composables/useNotify'
 import { toast } from '@/utils/toast'
 import { yuan, formatTime, maskPhone } from '@/utils/format'
 import { ORDER_STATUS, PAY_CHANNEL } from '@/utils/dict'
 import ProductArt from '@/components/common/ProductArt.vue'
 import CountdownBox from '@/components/common/CountdownBox.vue'
+import Modal from '@/components/common/Modal.vue'
 import Icon from '@/components/common/Icon.vue'
 import LogisticsTimeline from '@/components/order/LogisticsTimeline.vue'
 
@@ -16,6 +18,27 @@ const route = useRoute()
 const id = route.params.id as string
 const order = ref<Order | null>(null)
 const live = ref(false)
+const refundTypes: Array<{ v: RefundType; t: string }> = [
+  { v: 'REFUND', t: '仅退款' },
+  { v: 'RETURN', t: '退货退款' },
+  { v: 'EXCHANGE', t: '换货' },
+]
+const showRefund = ref(false)
+const refundForm = ref<{ type: RefundType; reason: string }>({ type: 'REFUND', reason: '' })
+async function submitRefund() {
+  if (!refundForm.value.reason.trim()) {
+    toast.error('请填写售后原因')
+    return
+  }
+  try {
+    await refundApi.create({ orderId: id, type: refundForm.value.type, reason: refundForm.value.reason.trim() })
+    toast.success('售后申请已提交，等待运营审批')
+    showRefund.value = false
+    load()
+  } catch (e) {
+    toast.error((e as unknown as { message: string }).message)
+  }
+}
 
 async function load() {
   order.value = await orderApi.detail(id)
@@ -70,10 +93,21 @@ async function confirmRecv() {
             </div>
           </template>
           <p v-else-if="closed" class="tip muted">{{ order.closeReason }}</p>
+          <template v-else-if="order.status === 'REFUND_APPLYING' || order.status === 'REFUNDED'">
+            <p class="tip" style="color: #e6a23c">售后状态：{{ ORDER_STATUS[order.status].text }}，
+              <RouterLink to="/user/refunds" style="text-decoration: underline">查看售后详情</RouterLink></p>
+          </template>
           <div v-else-if="order.status === 'SHIPPED'" class="btns">
             <button class="btn btn-primary" @click="confirmRecv">确认收货</button>
+            <button class="btn" @click="showRefund = true">申请售后</button>
           </div>
-          <p v-else-if="order.status === 'PAID'" class="tip muted">商家正在备货，发货后物流轨迹会实时推送</p>
+          <template v-else-if="order.status === 'PAID'">
+            <p class="tip muted">商家正在备货，发货后物流轨迹会实时推送</p>
+            <div class="btns"><button class="btn" @click="showRefund = true">申请售后</button></div>
+          </template>
+          <div v-else-if="order.status === 'COMPLETED'" class="btns">
+            <button class="btn" @click="showRefund = true">申请售后</button>
+          </div>
         </div>
         <ol v-if="!closed" class="steps">
           <li v-for="(s, i) in STEPS" :key="s.key" :class="{ done: i <= stepIdx, cur: i === stepIdx }">
@@ -131,10 +165,37 @@ async function confirmRecv() {
       </section>
     </template>
     <div v-else class="card skeleton" style="height: 300px" />
+
+    <Modal :open="showRefund" title="申请售后" @close="showRefund = false">
+      <p class="muted" style="margin-bottom: 12px">退款金额为订单实付款全额，提交后由运营审批。</p>
+      <div class="field">
+        <label>售后类型</label>
+        <div class="rf-types">
+          <button v-for="t in refundTypes" :key="t.v" class="btn btn-sm" :class="{ 'btn-primary': refundForm.type === t.v }"
+                  @click="refundForm.type = t.v">{{ t.t }}</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>售后原因</label>
+        <textarea v-model="refundForm.reason" class="input" rows="3" maxlength="200" placeholder="请描述问题（200 字内），例如：商品有破损 / 不想要了" />
+      </div>
+      <template #footer>
+        <button class="btn" @click="showRefund = false">取消</button>
+        <button class="btn btn-primary" @click="submitRefund">提交申请</button>
+      </template>
+    </Modal>
   </div>
 </template>
 
 <style scoped>
+.rf-types {
+  display: flex;
+  gap: 8px;
+}
+.price {
+  color: var(--c-primary);
+}
+
 .status {
   display: flex;
   align-items: center;
@@ -321,5 +382,19 @@ dd {
 }
 .total .price {
   font-size: 22px;
+}
+@media (max-width: 900px) {
+  .status { flex-direction: column; align-items: stretch; gap: 18px; padding: 18px; }
+  .left { width: 100%; }
+  .btns { flex-wrap: wrap; }
+  .steps { overflow-x: auto; }
+  .steps li { min-width: 64px; }
+  .cols { grid-template-columns: minmax(0, 1fr); }
+  .cols > * { min-width: 0; }
+  dd { min-width: 0; word-break: break-all; }
+  .item { gap: 10px; }
+  .nm { min-width: 0; }
+  .item .price { width: auto; }
+  .sum { width: 100%; }
 }
 </style>

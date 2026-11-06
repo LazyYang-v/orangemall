@@ -30,7 +30,7 @@ const statusRows = computed(() => {
   return entries.sort((a, b) => b[1] - a[1]).map(([k, n]) => ({ k, n, text: ORDER_STATUS[k].text, pct: n / total }))
 })
 const statusMax = computed(() => Math.max(1, ...statusRows.value.map((r) => r.n)))
-const LOG_COLOR: Record<OpsLog['type'], string> = { CACHE: 'tag-blue', MQ: 'tag', PAY: 'tag-green', SECKILL: 'tag-red', ORDER: 'tag-gray', RISK: 'tag-red' }
+const LOG_COLOR: Record<OpsLog['type'], string> = { CACHE: 'tag-blue', MQ: 'tag', PAY: 'tag-green', SECKILL: 'tag-red', ORDER: 'tag-gray', RISK: 'tag-red', REFUND: 'tag-blue', ALERT: 'tag-solid' }
 </script>
 
 <template>

@@ -154,4 +154,8 @@ async function exchange(g: PointsGoods) {
 .stock {
   font-size: 11px;
 }
+@media (max-width: 900px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .head { flex-wrap: wrap; gap: 12px; }
+}
 </style>

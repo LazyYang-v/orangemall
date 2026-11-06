@@ -58,22 +58,25 @@ public class Jobs {
     public void advanceLogistics() {
         for (String s : ShardShim.SHARDS) {
             for (OrderRow o : orderMapper.shippedInTransit(s, 200)) {
-                Logistics.Info lg = assembler.logistics(o.getLogisticsJson());
-                if (lg == null || lg.traces() == null || lg.traces().isEmpty()) continue;
-                Logistics.Trace step = Logistics.STEPS.get(Math.min(lg.traces().size() - 1, Logistics.STEPS.size() - 1));
-                if (step == null) continue;
                 try {
+                    Logistics.Info lg = assembler.logistics(o.getLogisticsJson());
+                    if (lg == null || lg.traces() == null || lg.traces().isEmpty()) continue;
+                    // 最新轨迹已是最后一步（已签收）则停止追加：模拟器只替代"配送中"的订阅推送，
+                    // 终态交由用户确认收货，避免每 12s 重复 prepend 导致 logistics_json 无界增长
+                    if (Logistics.STEPS.get(Logistics.STEPS.size() - 1).state().equals(lg.traces().get(0).state())) continue;
+                    Logistics.Trace step = Logistics.STEPS.get(Math.min(lg.traces().size() - 1, Logistics.STEPS.size() - 1));
+                    if (step == null) continue;
                     Instant last = Instant.parse(lg.traces().get(0).time());
                     if (Duration.between(last, Instant.now()).toMillis() < LOGISTICS_STEP_MS) continue;
+                    Logistics.Trace t = new Logistics.Trace(Logistics.iso(Instant.now()), step.state(), step.desc(), step.location());
+                    Logistics.Info next = lg.prepend(t);
+                    if (orderMapper.casLogistics(s, o.getId(), assembler.write(lg), assembler.write(next)) > 0) {
+                        ops.log("MQ", "[物流回调] 快递鸟推送 " + lg.trackingNo() + " " + t.desc() + " → MQ → WebSocket");
+                        Map<String, Object> trace = Map.of("time", t.time(), "state", t.state(), "desc", t.desc(), "location", t.location());
+                        notifier.send(o.getUserId(), Map.of("type", "LOGISTICS_UPDATE", "orderId", String.valueOf(o.getId()), "trace", trace));
+                    }
                 } catch (Exception e) {
-                    continue;
-                }
-                Logistics.Trace t = new Logistics.Trace(Logistics.iso(Instant.now()), step.state(), step.desc(), step.location());
-                Logistics.Info next = lg.prepend(t);
-                if (orderMapper.casLogistics(s, o.getId(), assembler.write(lg), assembler.write(next)) > 0) {
-                    ops.log("MQ", "[物流回调] 快递鸟推送 " + lg.trackingNo() + " " + t.desc() + " → MQ → WebSocket");
-                    Map<String, Object> trace = Map.of("time", t.time(), "state", t.state(), "desc", t.desc(), "location", t.location());
-                    notifier.send(o.getUserId(), Map.of("type", "LOGISTICS_UPDATE", "orderId", String.valueOf(o.getId()), "trace", trace));
+                    log.warn("订单 {} 物流推进失败，跳过: {}", o.getId(), e.getMessage());
                 }
             }
         }

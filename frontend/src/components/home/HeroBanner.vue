@@ -360,4 +360,11 @@ p {
   opacity: 0;
   transform: translateX(-24px);
 }
+@media (max-width: 900px) {
+  .copy { width: 100%; padding: 18px 18px 0; }
+  .pill { gap: 10px; }
+  h2 { font-size: 26px; white-space: normal; flex-wrap: wrap; gap: 0 8px; margin-top: 12px; }
+  .stage { opacity: 0.35; }
+  p { font-size: 13px; }
+}
 </style>

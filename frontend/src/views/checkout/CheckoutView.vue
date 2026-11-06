@@ -501,4 +501,10 @@ dd {
   justify-content: flex-end;
   gap: 4px;
 }
+@media (max-width: 900px) {
+  .addrs, .coupons { grid-template-columns: minmax(0, 1fr); }
+  .summary { width: 100%; }
+  .submit { width: 100%; }
+  .steps { display: none; }
+}
 </style>

@@ -47,6 +47,14 @@ const STATS = [
         <span>{{ s.text }}</span>
       </RouterLink>
     </section>
+    <section class="card tools">
+      <RouterLink to="/orders?status=PENDING_PAYMENT" class="tl"><Icon name="card" :size="18" /> 待付款</RouterLink>
+      <RouterLink to="/orders?status=PAID" class="tl"><Icon name="package" :size="18" /> 待发货</RouterLink>
+      <RouterLink to="/orders?status=SHIPPED" class="tl"><Icon name="truck" :size="18" /> 待收货</RouterLink>
+      <RouterLink to="/user/refunds" class="tl"><Icon name="refund" :size="18" /> 我的售后</RouterLink>
+      <RouterLink to="/user/addresses" class="tl"><Icon name="location" :size="18" /> 收货地址</RouterLink>
+      <RouterLink to="/user/coupons" class="tl"><Icon name="coupon" :size="18" /> 我的优惠券</RouterLink>
+    </section>
     <section class="card block">
       <h3>最近订单 <RouterLink to="/orders" class="more">全部订单 <Icon name="chevron-right" :size="12" /></RouterLink></h3>
       <RouterLink v-for="o in recent" :key="o.id" :to="`/orders/${o.id}`" class="ro">
@@ -98,6 +106,23 @@ const STATS = [
   grid-template-columns: repeat(4, 1fr);
   padding: 20px 0;
   margin-top: 14px;
+}
+.tools {
+  margin-top: 14px;
+  display: flex;
+  gap: 26px;
+  padding: 16px 24px;
+  flex-wrap: wrap;
+}
+.tools .tl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--c-text-2);
+}
+.tools .tl:hover {
+  color: var(--c-primary);
 }
 .st {
   display: flex;
@@ -164,5 +189,13 @@ const STATS = [
 .ro b {
   width: 70px;
   text-align: right;
+}
+@media (max-width: 900px) {
+  .hero { flex-direction: column; align-items: flex-start; gap: 14px; padding: 18px; }
+  .kpis { gap: 0; width: 100%; justify-content: space-between; }
+  .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 14px 0; }
+  .tools { gap: 14px 18px; padding: 14px 16px; }
+  .tools { flex-wrap: wrap; }
+  .block > * { min-width: 0; }
 }
 </style>

@@ -28,6 +28,7 @@ const ICONS: Record<string, string> = {
   book: '<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H11v17H5.5A1.5 1.5 0 0 0 4 21.5v-17ZM20 4.5A1.5 1.5 0 0 0 18.5 3H13v17h5.5a1.5 1.5 0 0 1 1.5 1.5v-17Z"/>',
   pill: '<rect x="7" y="3" width="10" height="18" rx="3"/><path d="M7 9h10M10 14h4M12 12v4"/>',
   shield: '<path d="M12 3 4.5 6v5.5c0 4.5 3.2 8.4 7.5 9.5 4.3-1.1 7.5-5 7.5-9.5V6L12 3Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+  refund: '<path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3 3v4.5h4.5"/><path d="M8.5 12h7M12 8.5l3.5 3.5L12 15.5"/>',
   truck: '<path d="M2 6h12v10H2zM14 9h4l3 3.5V16h-7"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/>',
   refresh: '<path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5"/>',
   card: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/>',

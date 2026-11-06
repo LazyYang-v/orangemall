@@ -72,4 +72,13 @@ nav a:not(.exact).router-link-active {
   flex: 1;
   min-width: 0;
 }
+@media (max-width: 900px) {
+  .uc { flex-direction: column; align-items: stretch; gap: 12px; }
+  .side { width: 100%; padding: 0; }
+  .me { display: none; }
+  nav { display: flex; overflow-x: auto; padding: 0; scrollbar-width: none; }
+  nav a { flex: none; padding: 12px 14px; white-space: nowrap; }
+  nav a.router-link-exact-active,
+  nav a:not(.exact).router-link-active { border-right: none; border-bottom: 3px solid var(--c-primary); }
+}
 </style>

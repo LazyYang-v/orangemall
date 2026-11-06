@@ -22,6 +22,9 @@ public class OrderRow {
     private int pointsUsed;
     private String remark;
     private String addressJson;
+    /** 冗余列（OM-015）：收货人/电话快照，避免 admin 关键字检索 JSON_EXTRACT 全表扫 */
+    private String receiver;
+    private String phone;
     private String activityId;
     private Instant payDeadline;
     private Instant paidAt;

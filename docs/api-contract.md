@@ -102,6 +102,23 @@
 3. 幂等：`UPDATE pay SET status='SUCCESS' WHERE payment_no=? AND status='PENDING'`。影响行数为 0 说明已处理过，直接返回 success，并标记 `idempotent: true`。
 4. 支付成功后发 MQ 消息，由订单服务把订单改为 `PAID`。
 
+### 6.1 售后 / 退款（Phase 2，设计见 `docs/refund-design.md`）
+
+| 方法 | 路径 | 鉴权 | 请求 | 响应 `data` |
+|---|---|---|---|---|
+| POST | `/refunds` | user | `{ orderId, type: 'REFUND'|'RETURN'|'EXCHANGE', reason }` | `RefundOrder`（全额；订单 → `REFUND_APPLYING`） |
+| GET | `/refunds` | user | `page?, size?` | `RefundOrder[]`（本人） |
+| GET | `/refunds/:refundId` | user | — | `RefundOrder` |
+| POST | `/refunds/:refundId/cancel` | user | — | `true`（仅 `WAIT_APPROVAL`；订单回退到 `prevStatus`） |
+| GET | `/admin/refunds` | admin | `status?, keyword?, page, size` | `PageResult<RefundOrder>` |
+| POST | `/admin/refunds/:refundId/approve` | admin | `{ pass, remark? }` | `RefundOrder`；通过 → `APPROVED → REFUNDING`，渠道受理后异步回调 |
+
+状态机：`WAIT_APPROVAL → APPROVED → REFUNDING → DONE`，旁路 `REJECTED` / `CANCELLED`（订单按 `prev_status` 回退）。
+退款回调复用 `POST /payments/notify`，报文带 `refundId` 且 `tradeStatus = 'REFUND_SUCCESS'`，
+签名 `HMAC(paymentNo|refundId|amount|REFUND_SUCCESS)`；以 `refundId` 为幂等键、CAS 更新，
+完成后：订单 → `REFUNDED`，`payment.refunded_amount += amount`，非换货回补库存，WebSocket 推送 `REFUND_UPDATE`。
+`REFUNDING` 超 24h 由 `PayJobs.alertStuckRefunds` 告警。
+
 ## 7. 秒杀服务 seckill-service
 
 | 方法 | 路径 | 鉴权 | 请求 | 响应 `data` |
@@ -135,7 +152,7 @@
 | 方法 | 路径 | 请求 | 响应 `data` / 说明 |
 |---|---|---|---|
 | GET | `/admin/dashboard` | — | `DashboardStats`（今日 GMV/订单/转化率/待发货、状态分布、近 7 日） |
-| GET | `/admin/orders` | `status?, source?(NORMAL/SECKILL), keyword?, page, size` | `PageResult<Order>` |
+| GET | `/admin/orders` | `status?, source?(NORMAL/SECKILL), keyword?(收货人/手机号, 走冗余列 receiver/phone), page, size` | `PageResult<Order>`；状态新增 `REFUND_APPLYING` / `REFUNDED` |
 | POST | `/admin/orders/:id/ship` | `{ company, trackingNo? }` | `true`；推送 `ORDER_STATUS` + `LOGISTICS_UPDATE` |
 | POST | `/admin/orders/:id/expire` | — | **仅 Mock/测试环境**：让延迟消息立即到期 |
 | GET | `/admin/products` | `keyword?, status?` | `Spu[]` |
@@ -152,6 +169,13 @@
 | POST | `/admin/seckill/:activityId/simulate` | `{ users }` | **仅压测环境**：`{ requests, success, soldOut, limited, redisLeft, dbLeft }` |
 | GET | `/admin/cache/check` | — | `{ rows: CacheCheckRow[], hitRate, hit, miss }` |
 | POST | `/admin/cache/repair` | `{ key }` | `true`（以 DB 为准回写 Redis） |
+| GET | `/admin/seckill/health` | — | 秒杀可靠性（Phase 3 OM-013/019）：`{ consumer:{running,paused}, lag, stuckSeconds, autoReset, inflight:[{activityId,session,inflight,heldSeconds,state}], deadLetters:{new,total} }`；`lag=-1` 表示积压探测失败；`state` ∈ NEW 观察中 / BACKLOG 消费积压 / UNKNOWN 探测失败 / LEAK 计数泄漏 |
+| GET | `/admin/seckill/dead-letters?status=NEW\|RESOLVED` | — | 最近 100 条死信：`{ id, activityId, userId, reason(POISON/INVALID/EXHAUSTED/COMPENSATE_FAILED), error, payload, srcPartition, srcOffset, status, remark, resolvedAt, createdAt }[]` |
+| POST | `/admin/seckill/dead-letters/:id/resolve` | `{ remark? }` | `true`；已处理或不存在 → `7011` |
+| POST | `/admin/seckill/:activityId/inflight/reset` | `{ force? }` | 扣除当前滞留在途并以 DB 为准回补 Redis 库存：`{ reset, cleared, inflight, redisStock, dbStock }`；主题仍有积压或探测失败且未 `force` → `7010` |
+| POST | `/admin/seckill/consumer/pause` · `/resume` | — | **故障演练**：暂停 / 恢复秒杀主消费者 `{ paused }`；未就绪 → `7012` |
+| GET | `/admin/users` | `keyword?(手机号/昵称), page, size` | `PageResult<AdminUser>`（Phase 2） |
+| GET | `/admin/users/:id` | — | `AdminUser`；不存在 `9006` |
 | GET | `/admin/risk` | — | `RiskUser[]`（按信用分升序） |
 | PUT | `/admin/risk/:userId` | `{ blocked }` | `true` |
 | GET | `/admin/logs` | `type?` | `OpsLog[]`（最多 100 条；真实环境可对接 SkyWalking / ELK） |
@@ -168,7 +192,8 @@
 | 4xxx 营销 | 4001 券不存在 · 4002 活动结束 · 4003 券已抢光 · 4004 达到限领 · 4005 券不可用 · **4290 限流** | |
 | 5xxx 订单 | 5001 重复提交 · 5002 未选地址 · 5004 订单不存在 · 5005 不可取消 · 5006 不可确认收货 · 5009 风控拦截 | |
 | 6xxx 支付 | 6001 订单不可支付/已关闭 · 6002 流水不存在 · 6003 验签失败 · 6004 金额不一致 | |
-| 7xxx 秒杀 | 7001 活动不存在 · 7002 未开始/已结束 · 7003 path 无效 · 7004 已抢过 · 7005 已抢完 · 7009 风控拦截 | |
+| 61xx 售后 | 6101 当前订单状态不可售后 · 6102 售后单不存在 · 6103 已有进行中的售后单 · 6104 售后单已受理/与原流水不匹配 | |
+| 7xxx 秒杀 | 7001 活动不存在 · 7002 未开始/已结束 · 7003 path 无效 · 7004 已抢过 · 7005 已抢完 · 7009 风控拦截 · 7010 在途重置被拒（有积压，需 force）· 7011 死信不存在/已处理 · 7012 消费者未就绪 | |
 | 8xxx 积分 | 8001 商品不存在 · 8002 已兑完 · 8003 积分不足 | |
 | 9xxx 后台 | 9001 仅待发货可发货 · 9002 仅待支付可模拟超时 · 9003 类目不存在 · 9004 有子类目 · 9005 类目下有商品 · 9006 用户不存在 | |
 

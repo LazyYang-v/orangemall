@@ -72,7 +72,7 @@ const STATUS_OPTS = Object.entries(ORDER_STATUS) as Array<[OrderStatus, { text: 
           <option value="NORMAL">普通订单</option>
           <option value="SECKILL">秒杀订单</option>
         </select>
-        <input v-model.trim="q.keyword" class="input" style="width: 260px" placeholder="订单号 / 收货人 / 手机号" @keyup.enter="search" />
+        <input v-model.trim="q.keyword" class="input" style="width: 260px" placeholder="完整订单号 / 收货人或手机号开头" title="订单号精确匹配；收货人、手机号按前缀匹配（走索引）" @keyup.enter="search" />
         <button class="btn btn-primary btn-sm btn-square" @click="search">查询</button>
       </div>
       <table class="table">

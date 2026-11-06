@@ -121,4 +121,8 @@ h3 {
   padding-left: 8px;
   font-weight: 600;
 }
+@media (max-width: 900px) {
+  .list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .item { min-width: 0; }
+}
 </style>

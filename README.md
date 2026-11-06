@@ -12,26 +12,36 @@ frontend/     Vue 3 + TS + Vite SPA（自带 in-browser Mock，可脱离后端�
 backend/      11 个 Maven 模块：mall-common / mall-api / mall-web-starter 共享层
               + 网关与 7 个业务服务（user/product/cart/marketing/order/pay/seckill）
 deploy/       docker-compose（基础设施 + app profile 全套容器）与 Nginx/MySQL 配置
-docs/         api-contract.md（前端⇄后端契约）· frontend-design.md · backend-design.md
-backend/AGENT-BRIEF.md  并行开发广告牌（过程用，可删除）
+docs/         api-contract.md（契约+实现状态）· backend-design.md · AUDIT-2026-11-06.md（审查报告）· PHASE1-REPORT.md / PHASE2-REPORT.md / PHASE3-REPORT.md（实施结果）· refund-design.md · pages-matrix.md
+bench/        k6 秒杀压测（场次读 / 拒绝路径 / 5000 用户全链路 / 纯落单吞吐）、不超卖核对、故障演练；见 bench/README.md、bench/results/
 ```
 
 ## 快速开始
 
 ```bash
-# 1) 基础设施（MySQL/Redis/RabbitMQ/Kafka/Nacos/Seata）
+# 1) 部署密钥（必填，不入仓库：JWT/支付回调/内部接口三把钥匙）
+cp backend/deploy/.env.example backend/deploy/.env
+#    每个 key 用 `openssl rand -hex 24` 生成真实值
+
+# 2) 基础设施（MySQL/Redis/RabbitMQ/Kafka/Nacos/Seata）
 cd backend/deploy && docker compose up -d
 
-# 2) 打包 + 全套容器（先完成 backend/ 下各模块 mvn package 与 frontend npm run build）
+# 3) 打包 + 全套容器（先完成 backend/ 下各模块 mvn package 与 frontend npm run build）
 cd backend/deploy && docker compose --profile app up -d --build
 
-# 3) 打开 http://localhost:8090
+# 4) 打开 http://localhost:8090
 #    网关直连：http://localhost:18080
 ```
+
+> 部署密钥（JWT / 支付回调 / 服务间内部）必须经 .env 注入，缺省值仅供本地开发；
+> compose 在缺失时会直接报错并提示复制 .env.example。
 
 前端两种模式：
 - `cd frontend && npm run dev` —— 纯前端 Mock（无需任何后端）。
 - `cd frontend && npm run dev:backend` —— 关闭 Mock，走本机 18080 真网关（或直接使用 8090 的 Nginx 部署）。
+
+端到端冒烟（需整套栈已在 8090 运行）：`cd frontend && npm run test:e2e`（Playwright，本机用系统 Chrome；
+CI 见 `.github/workflows/e2e.yml`）；375px 横向溢出体检：`node scripts/mobile-audit.mjs`。
 
 ## 演示账号
 

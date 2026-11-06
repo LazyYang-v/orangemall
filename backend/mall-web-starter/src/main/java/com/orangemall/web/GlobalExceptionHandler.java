@@ -19,7 +19,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BizException.class)
     public Result<Void> biz(BizException e) {
-        log.info("biz error {} {}", e.getCode(), e.getMessage());
+        // 业务拒绝（已抢完 / path 无效 / 限流…）属于正常流程：DEBUG 级别。
+        // OM-025 压测实测：INFO 时秒杀拒绝路径每秒数千行同步写控制台，是 seckill 的主要 CPU 开销之一。
+        log.debug("biz error {} {}", e.getCode(), e.getMessage());
         return Result.fail(e.getCode(), e.getMessage());
     }
 

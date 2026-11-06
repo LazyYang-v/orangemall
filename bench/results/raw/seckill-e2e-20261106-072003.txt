@@ -1,0 +1,28 @@
+
+     ✓ has orderId
+
+     checks.........................: 100.00% 1000 out of 1000
+     data_received..................: 11 MB   379 kB/s
+     data_sent......................: 15 MB   494 kB/s
+     http_req_blocked...............: avg=1.84ms   med=3.7µs    p(90)=9.29µs   p(95)=16.47µs  p(99)=81.41ms max=156.53ms
+     http_req_connecting............: avg=1.06ms   med=0s       p(90)=0s       p(95)=0s       p(99)=48.87ms max=108.9ms 
+     http_req_duration..............: avg=293ms    med=253.85ms p(90)=570.02ms p(95)=741.34ms p(99)=1.06s   max=1.94s   
+       { expected_response:true }...: avg=293ms    med=253.85ms p(90)=570.02ms p(95)=741.34ms p(99)=1.06s   max=1.94s   
+     ✗ { name:submit }..............: avg=437.01ms med=356.44ms p(90)=876.81ms p(95)=1.11s    p(99)=1.4s    max=1.94s   
+     http_req_failed................: 0.00%   0 out of 38772
+     http_req_receiving.............: avg=7.13ms   med=487.77µs p(90)=20.32ms  p(95)=37.07ms  p(99)=91.85ms max=324.31ms
+     http_req_sending...............: avg=342.69µs med=10.37µs  p(90)=45.7µs   p(95)=233.5µs  p(99)=7.28ms  max=97.32ms 
+     http_req_tls_handshaking.......: avg=0s       med=0s       p(90)=0s       p(95)=0s       p(99)=0s      max=0s      
+     http_req_waiting...............: avg=285.53ms med=246.13ms p(90)=558.15ms p(95)=731.82ms p(99)=1.06s   max=1.94s   
+     http_reqs......................: 38772   1313.516131/s
+     iteration_duration.............: avg=4.67s    med=929.04ms p(90)=22.2s    p(95)=25.84s   p(99)=28.27s  max=29.51s  
+     iterations.....................: 5000    169.389783/s
+     orders_success.................: 1000    33.877957/s
+     outcome........................: 5000    169.389783/s
+     sold_out.......................: 4000    135.511826/s
+     submit_to_success_ms...........: avg=18.65s   med=20.91s   p(90)=25.94s   p(95)=26.64s   p(99)=27.22s  max=28.17s  
+   ✓ unexpected.....................: 0       0/s
+     vus............................: 19      min=19           max=1000
+     vus_max........................: 1000    min=1000         max=1000
+
+time="2026-11-05T23:20:34Z" level=error msg="thresholds on metrics 'http_req_duration{name:submit}' have been crossed"

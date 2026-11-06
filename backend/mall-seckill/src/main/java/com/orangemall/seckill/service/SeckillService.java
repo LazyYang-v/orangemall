@@ -83,12 +83,13 @@ public class SeckillService {
             for (SeckillCalendar.Tpl tpl : SeckillCalendar.rotated(s.start())) allIds.add(SeckillCalendar.activityId(s.id(), tpl.skuId()));
         }
         Map<String, SeckillActivity> rows = rows(allIds);
+        Map<String, String> stocks = stocks(allIds);
         List<SessionVO> out = new ArrayList<>();
         for (SeckillCalendar.Session s : window) {
             List<SeckillItemVO> items = new ArrayList<>();
             for (SeckillCalendar.Tpl tpl : SeckillCalendar.rotated(s.start())) {
                 String aid = SeckillCalendar.activityId(s.id(), tpl.skuId());
-                items.add(toItem(aid, s, tpl, rows.get(aid), now));
+                items.add(toItem(aid, s, tpl, rows.get(aid), stocks.get(aid), now));
             }
             out.add(new SessionVO(s.id(), s.label(), s.startIso(), s.endIso(), s.status(now), items));
         }
@@ -96,11 +97,17 @@ public class SeckillService {
     }
 
     public SeckillItemVO item(String activityId) {
+        return item(activityId, true);
+    }
+
+    /** @param withStock false 时不读 Redis 库存（remainStock 为模板值），供提交路径只取状态/价格，省一次往返 */
+    private SeckillItemVO item(String activityId, boolean withStock) {
         long now = System.currentTimeMillis();
         for (SeckillCalendar.Session s : SeckillCalendar.window(now)) {
             for (SeckillCalendar.Tpl tpl : SeckillCalendar.rotated(s.start())) {
                 if (SeckillCalendar.activityId(s.id(), tpl.skuId()).equals(activityId)) {
-                    return toItem(activityId, s, tpl, row(activityId), now);
+                    return toItem(activityId, s, tpl, row(activityId),
+                            withStock ? redis.opsForValue().get(Keys.stock(activityId)) : null, now);
                 }
             }
         }
@@ -108,9 +115,8 @@ public class SeckillService {
     }
 
     private SeckillItemVO toItem(String aid, SeckillCalendar.Session s, SeckillCalendar.Tpl tpl,
-                                 SeckillActivity row, long now) {
+                                 SeckillActivity row, String stockRaw, long now) {
         String status = s.status(now);
-        String stockRaw = redis.opsForValue().get(Keys.stock(aid));
         boolean warmed = stockRaw != null;
         int remain = warmed ? Math.max(0, Integer.parseInt(stockRaw)) : tpl.stock();
         return new SeckillItemVO(aid, s.id(), String.valueOf(tpl.skuId()), String.valueOf(tpl.spuId()),
@@ -127,11 +133,43 @@ public class SeckillService {
         return m.get(aid);
     }
 
-    /** 批量取活动行（单次 selectBatchIds，避免逐行查询） */
+    /**
+     * 批量取活动行（展示用：名称/图标/色调/原价/skuId，建场后不再变化），本地缓存 {@link #ROW_TTL_MS}。
+     * 压测（OM-025）：场次列表每请求一次 selectBatchIds 时，1500 QPS 下 DB 连接池排队，p95 秒级；
+     * 缓存后列表只读 Redis。库存不走这里（实时读 Redis），未建场的 id 不缓存，建场后下一次即可读到。
+     */
     private Map<String, SeckillActivity> rows(List<String> aids) {
         if (aids.isEmpty()) return Map.of();
+        long now = System.currentTimeMillis();
         Map<String, SeckillActivity> m = new HashMap<>();
-        for (SeckillActivity a : activityMapper.selectBatchIds(aids)) m.put(a.getId(), a);
+        List<String> miss = new ArrayList<>();
+        for (String id : aids) {
+            CachedRow c = rowCache.get(id);
+            if (c != null && c.expireAt > now) m.put(id, c.row);
+            else miss.add(id);
+        }
+        if (!miss.isEmpty()) {
+            for (SeckillActivity a : activityMapper.selectBatchIds(miss)) {
+                m.put(a.getId(), a);
+                rowCache.put(a.getId(), new CachedRow(a, now + ROW_TTL_MS));
+            }
+            if (rowCache.size() > 4096) rowCache.entrySet().removeIf(e -> e.getValue().expireAt <= now);
+        }
+        return m;
+    }
+
+    private static final long ROW_TTL_MS = 10_000;
+    private record CachedRow(SeckillActivity row, long expireAt) {
+    }
+    private final java.util.concurrent.ConcurrentHashMap<String, CachedRow> rowCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 一次 MGET 取多个活动的 Redis 库存（替代逐个 GET 的串行往返） */
+    private Map<String, String> stocks(List<String> aids) {
+        List<String> keys = new ArrayList<>(aids.size());
+        for (String id : aids) keys.add(Keys.stock(id));
+        List<String> vals = redis.opsForValue().multiGet(keys);
+        Map<String, String> m = new HashMap<>();
+        for (int i = 0; i < aids.size(); i++) m.put(aids.get(i), vals == null ? null : vals.get(i));
         return m;
     }
 
@@ -144,12 +182,13 @@ public class SeckillService {
                 List<String> ids = new ArrayList<>();
                 for (SeckillCalendar.Tpl tpl : tpls) ids.add(SeckillCalendar.activityId(s.id(), tpl.skuId()));
                 Map<String, SeckillActivity> rows = rows(ids);
+                Map<String, String> stocks = stocks(ids);
                 List<Map<String, Object>> items = new ArrayList<>();
                 int i = 0;
                 for (SeckillCalendar.Tpl tpl : tpls) {
                     if (i++ >= 4) break;
-                    SeckillItemVO it = toItem(SeckillCalendar.activityId(s.id(), tpl.skuId()), s, tpl,
-                            rows.get(SeckillCalendar.activityId(s.id(), tpl.skuId())), now);
+                    String aid = SeckillCalendar.activityId(s.id(), tpl.skuId());
+                    SeckillItemVO it = toItem(aid, s, tpl, rows.get(aid), stocks.get(aid), now);
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("activityId", it.activityId());
                     m.put("sessionId", it.sessionId());
@@ -184,8 +223,14 @@ public class SeckillService {
         SeckillItemVO it = item(activityId);
         long now = System.currentTimeMillis();
         if (!"ONGOING".equals(it.status())) throw new BizException(7002, "UPCOMING".equals(it.status()) ? "活动未开始" : "活动已结束");
+        long userId = UserContext.requireUser();
+        // path 签发频控（OM-007）：每（用户，活动）每分钟至多 5 次，防脚本无成本刷 Redis 写带宽
+        String cntKey = Keys.METRICS_PATH + activityId + ":" + userId;
+        Long n = redis.opsForValue().increment(cntKey);
+        if (n != null && n == 1L) redis.expire(cntKey, java.time.Duration.ofSeconds(60));
+        if (n != null && n > 5) throw new BizException(4290, "当前抢购人数过多，请稍后再试");
         String path = UUID.randomUUID().toString().replace("-", "");
-        redis.opsForValue().set(Keys.path(activityId, UserContext.requireUser()), path,
+        redis.opsForValue().set(Keys.path(activityId, userId), path,
                 java.time.Duration.ofSeconds(props.getPathTtlSeconds()));
         return path;
     }
@@ -194,8 +239,8 @@ public class SeckillService {
     public Map<String, Object> submit(String activityId, String path, Long addressId) {
         long userId = UserContext.requireUser();
         long now = System.currentTimeMillis();
-        SeckillItemVO it = item(activityId);
-        SeckillActivity row = activityMapper.selectById(activityId);
+        SeckillItemVO it = item(activityId, false);
+        SeckillActivity row = row(activityId); // 本地缓存行（只用 skuId），拒绝路径不再打 DB
         if (row == null) throw new BizException(7001, "秒杀活动不存在");
         if (!"ONGOING".equals(it.status())) throw new BizException(7002, "活动未开始或已结束");
 
@@ -233,7 +278,8 @@ public class SeckillService {
             msg.put("seckillPrice", it.seckillPrice());
             msg.put("addressId", addressId);
             msg.put("sim", false);
-            kafka.send(Const.KAFKA_SECKILL_TOPIC, activityId, om.writeValueAsString(msg));
+            // 按 userId 分区：单活动的落单可并行（正确性由 DB 乐观锁 + 一人一单唯一键保证，不依赖分区内顺序）
+            kafka.send(Const.KAFKA_SECKILL_TOPIC, String.valueOf(userId), om.writeValueAsString(msg));
         } catch (Exception e) {
             log.error("kafka send failed: {}", e.getMessage());
             compensate(activityId, userId, "系统繁忙，请重试", false);
